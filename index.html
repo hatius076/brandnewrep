@@ -14,6 +14,7 @@
             <div id="session-info">
                 <span id="session-id"></span>
                 <span id="progress-indicator"></span>
+                <button id="settings-button" class="header-btn">⚙️ Settings</button>
             </div>
         </header>
 
@@ -79,10 +80,88 @@
             <button id="download-data">Download Session Data</button>
             <textarea id="session-data" readonly></textarea>
         </div>
+
+        <!-- API Configuration Modal -->
+        <div id="settings-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>LLM API Settings</h2>
+                    <button id="close-settings" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label for="api-key-input">OpenAI API Key:</label>
+                        <input type="password" id="api-key-input" placeholder="sk-..." />
+                        <div class="setting-help">
+                            ⚠️ <strong>Security Notice:</strong> Your API key is stored locally in your browser and sent directly to OpenAI. 
+                            Never share your API key or use it on untrusted devices.
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="model-select">Model:</label>
+                        <select id="model-select">
+                            <option value="gpt-4">GPT-4 (Recommended)</option>
+                            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="debug-mode" />
+                            Debug Mode (Show AI thoughts)
+                        </label>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="offline-mode" />
+                            Offline Mode (Use fallback responses)
+                        </label>
+                    </div>
+
+                    <div class="setting-status">
+                        <div id="api-status">API Status: <span id="status-indicator">Not configured</span></div>
+                        <div id="usage-stats" class="hidden">
+                            <div>Requests: <span id="request-count">0</span></div>
+                            <div>Estimated Cost: $<span id="cost-estimate">0.00</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="test-api">Test API</button>
+                    <button id="save-settings" class="primary">Save Settings</button>
+                    <button id="clear-settings" class="danger">Clear All</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Panel (Hidden by default) -->
+        <div id="debug-panel" class="hidden">
+            <div class="debug-header">
+                <h3>AI Debug Information</h3>
+                <button id="toggle-debug">&minus;</button>
+            </div>
+            <div class="debug-content">
+                <div class="debug-section">
+                    <strong>Last AI Thought:</strong>
+                    <div id="debug-thought"></div>
+                </div>
+                <div class="debug-section">
+                    <strong>Character Type:</strong> <span id="debug-character"></span>
+                </div>
+                <div class="debug-section">
+                    <strong>Memory Status:</strong> <span id="debug-memory"></span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Load JavaScript -->
     <script src="config/flags.js"></script>
+    <script src="config/api.js"></script>
+    <script src="prompts/templates.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

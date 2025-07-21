@@ -1,6 +1,7 @@
 /**
  * HCI Memory-Fidelity Visual Novel Game Engine
  * Tests how AI character memory accuracy influences user perception
+ * Enhanced with LLM API integration for dynamic responses
  */
 
 class VisualNovelGame {
@@ -15,13 +16,18 @@ class VisualNovelGame {
             quizAnswers: [],
             ratings: {},
             dialogue: [],
-            memoryErrors: 0
+            memoryErrors: 0,
+            llmEnabled: false,
+            debugMode: false,
+            lastLLMThought: ''
         };
         
         this.elements = {};
+        this.llmClient = null;
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
+        this.initializeLLMSystem();
         this.startGame();
     }
     
@@ -59,7 +65,29 @@ class VisualNovelGame {
             
             dataExport: document.getElementById('data-export'),
             downloadData: document.getElementById('download-data'),
-            sessionData: document.getElementById('session-data')
+            sessionData: document.getElementById('session-data'),
+            
+            // New LLM-related elements
+            settingsButton: document.getElementById('settings-button'),
+            settingsModal: document.getElementById('settings-modal'),
+            closeSettings: document.getElementById('close-settings'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            modelSelect: document.getElementById('model-select'),
+            debugModeCheckbox: document.getElementById('debug-mode'),
+            offlineModeCheckbox: document.getElementById('offline-mode'),
+            statusIndicator: document.getElementById('status-indicator'),
+            usageStats: document.getElementById('usage-stats'),
+            requestCount: document.getElementById('request-count'),
+            costEstimate: document.getElementById('cost-estimate'),
+            testApiButton: document.getElementById('test-api'),
+            saveSettingsButton: document.getElementById('save-settings'),
+            clearSettingsButton: document.getElementById('clear-settings'),
+            
+            debugPanel: document.getElementById('debug-panel'),
+            debugThought: document.getElementById('debug-thought'),
+            debugCharacter: document.getElementById('debug-character'),
+            debugMemory: document.getElementById('debug-memory'),
+            toggleDebug: document.getElementById('toggle-debug')
         };
     }
     
@@ -85,6 +113,23 @@ class VisualNovelGame {
         
         // Data download
         this.elements.downloadData.addEventListener('click', () => this.downloadSessionData());
+        
+        // Settings modal
+        this.elements.settingsButton.addEventListener('click', () => this.openSettingsModal());
+        this.elements.closeSettings.addEventListener('click', () => this.closeSettingsModal());
+        this.elements.settingsModal.addEventListener('click', (e) => {
+            if (e.target === this.elements.settingsModal) this.closeSettingsModal();
+        });
+        
+        // Settings controls
+        this.elements.testApiButton.addEventListener('click', () => this.testApiConnection());
+        this.elements.saveSettingsButton.addEventListener('click', () => this.saveSettings());
+        this.elements.clearSettingsButton.addEventListener('click', () => this.clearSettings());
+        this.elements.debugModeCheckbox.addEventListener('change', () => this.toggleDebugMode());
+        this.elements.offlineModeCheckbox.addEventListener('change', () => this.toggleOfflineMode());
+        
+        // Debug panel
+        this.elements.toggleDebug.addEventListener('click', () => this.toggleDebugPanel());
     }
     
     async loadDialogueData() {
@@ -109,6 +154,240 @@ class VisualNovelGame {
                 "How much would you want to interact with this assistant again?"
             ]
         };
+    }
+    
+    /**
+     * Initialize LLM system and load settings
+     */
+    initializeLLMSystem() {
+        // Check if API is configured
+        this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
+        
+        // Load saved settings
+        this.loadLLMSettings();
+        
+        // Update debug info
+        this.updateDebugInfo();
+    }
+    
+    /**
+     * Load LLM settings from storage and update UI
+     */
+    loadLLMSettings() {
+        try {
+            const saved = localStorage.getItem('llm_ui_settings');
+            if (saved) {
+                const settings = JSON.parse(saved);
+                this.state.debugMode = settings.debugMode || false;
+                this.elements.debugModeCheckbox.checked = this.state.debugMode;
+                this.elements.offlineModeCheckbox.checked = settings.offlineMode || false;
+            }
+        } catch (error) {
+            console.warn('Failed to load LLM UI settings:', error);
+        }
+        
+        // Update UI with current API config
+        if (window.apiConfig.isConfigured()) {
+            this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey();
+            this.elements.modelSelect.value = window.apiConfig.model;
+        }
+        
+        this.updateApiStatus();
+    }
+    
+    /**
+     * Open settings modal
+     */
+    openSettingsModal() {
+        this.elements.settingsModal.classList.remove('hidden');
+        this.updateApiStatus();
+        this.updateUsageStats();
+    }
+    
+    /**
+     * Close settings modal
+     */
+    closeSettingsModal() {
+        this.elements.settingsModal.classList.add('hidden');
+    }
+    
+    /**
+     * Test API connection
+     */
+    async testApiConnection() {
+        const apiKey = this.elements.apiKeyInput.value.trim();
+        if (!apiKey) {
+            alert('Please enter an API key first.');
+            return;
+        }
+        
+        this.elements.statusIndicator.textContent = 'Testing...';
+        this.elements.statusIndicator.className = 'testing';
+        this.elements.testApiButton.disabled = true;
+        
+        try {
+            const isValid = await window.apiConfig.setApiKey(apiKey);
+            this.state.llmEnabled = isValid && !this.elements.offlineModeCheckbox.checked;
+            this.updateApiStatus();
+            
+            if (isValid) {
+                alert('API connection successful!');
+            } else {
+                alert('API connection failed. Please check your API key.');
+            }
+        } catch (error) {
+            console.error('API test failed:', error);
+            alert('API test failed: ' + error.message);
+            this.updateApiStatus();
+        } finally {
+            this.elements.testApiButton.disabled = false;
+        }
+    }
+    
+    /**
+     * Save settings
+     */
+    saveSettings() {
+        const apiKey = this.elements.apiKeyInput.value.trim();
+        const model = this.elements.modelSelect.value;
+        const debugMode = this.elements.debugModeCheckbox.checked;
+        const offlineMode = this.elements.offlineModeCheckbox.checked;
+        
+        // Save API config
+        if (apiKey && !apiKey.includes('...')) {
+            window.apiConfig.setApiKey(apiKey);
+        }
+        window.apiConfig.model = model;
+        window.apiConfig.saveConfig();
+        
+        // Save UI settings
+        const uiSettings = { debugMode, offlineMode };
+        localStorage.setItem('llm_ui_settings', JSON.stringify(uiSettings));
+        
+        // Update state
+        this.state.debugMode = debugMode;
+        this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
+        
+        this.updateApiStatus();
+        this.updateDebugInfo();
+        this.closeSettingsModal();
+        
+        // Show/hide debug panel
+        if (debugMode) {
+            this.elements.debugPanel.classList.remove('hidden');
+        } else {
+            this.elements.debugPanel.classList.add('hidden');
+        }
+    }
+    
+    /**
+     * Clear all settings
+     */
+    clearSettings() {
+        if (confirm('Are you sure you want to clear all API settings and data?')) {
+            window.apiConfig.clearConfig();
+            localStorage.removeItem('llm_ui_settings');
+            
+            this.elements.apiKeyInput.value = '';
+            this.elements.modelSelect.value = 'gpt-4';
+            this.elements.debugModeCheckbox.checked = false;
+            this.elements.offlineModeCheckbox.checked = false;
+            
+            this.state.llmEnabled = false;
+            this.state.debugMode = false;
+            
+            this.updateApiStatus();
+            this.updateDebugInfo();
+            this.elements.debugPanel.classList.add('hidden');
+        }
+    }
+    
+    /**
+     * Toggle debug mode
+     */
+    toggleDebugMode() {
+        this.state.debugMode = this.elements.debugModeCheckbox.checked;
+        if (this.state.debugMode) {
+            this.elements.debugPanel.classList.remove('hidden');
+        } else {
+            this.elements.debugPanel.classList.add('hidden');
+        }
+        this.updateDebugInfo();
+    }
+    
+    /**
+     * Toggle offline mode
+     */
+    toggleOfflineMode() {
+        const offlineMode = this.elements.offlineModeCheckbox.checked;
+        this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
+        this.updateApiStatus();
+    }
+    
+    /**
+     * Toggle debug panel visibility
+     */
+    toggleDebugPanel() {
+        const content = this.elements.debugPanel.querySelector('.debug-content');
+        const toggleBtn = this.elements.toggleDebug;
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            toggleBtn.textContent = '−';
+        } else {
+            content.style.display = 'none';
+            toggleBtn.textContent = '+';
+        }
+    }
+    
+    /**
+     * Update API status display
+     */
+    updateApiStatus() {
+        let status = 'Not configured';
+        let className = 'offline';
+        
+        if (this.elements.offlineModeCheckbox.checked) {
+            status = 'Offline mode';
+            className = 'offline';
+        } else if (window.apiConfig.isOnline) {
+            status = 'Online';
+            className = 'online';
+        } else if (window.apiConfig.isConfigured()) {
+            status = 'Configured but offline';
+            className = 'offline';
+        }
+        
+        this.elements.statusIndicator.textContent = status;
+        this.elements.statusIndicator.className = className;
+    }
+    
+    /**
+     * Update usage statistics display
+     */
+    updateUsageStats() {
+        const stats = window.apiConfig.getUsageStats();
+        this.elements.requestCount.textContent = stats.requestCount;
+        this.elements.costEstimate.textContent = stats.estimatedCost.toFixed(4);
+        
+        if (stats.requestCount > 0) {
+            this.elements.usageStats.classList.remove('hidden');
+        }
+    }
+    
+    /**
+     * Update debug information
+     */
+    updateDebugInfo() {
+        this.elements.debugCharacter.textContent = 
+            `Character ${this.state.characterType} (${this.state.characterType === 'A' ? 'Perfect Memory' : 'Impaired Memory'})`;
+        
+        this.elements.debugMemory.textContent = 
+            `Errors: ${this.state.memoryErrors}/${GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS}`;
+            
+        if (this.state.lastLLMThought) {
+            this.elements.debugThought.textContent = this.state.lastLLMThought;
+        }
     }
     
     getGreetingMessage() {
@@ -186,7 +465,21 @@ class VisualNovelGame {
     }
     
     async startIntroduction() {
-        await this.displayMessage(this.dialogueData.introduction.greeting);
+        try {
+            let greeting;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                greeting = await this.generateLLMResponse('introduction', { 
+                    customPrompt: "Greet the user warmly and ask to learn about them. Be friendly and personable." 
+                });
+            } else {
+                greeting = window.fallbackSystem.generateResponse('introduction').response;
+            }
+            await this.displayMessage(greeting);
+        } catch (error) {
+            console.error('Error generating greeting:', error);
+            const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
+            await this.displayMessage(fallbackGreeting);
+        }
         this.collectNextFact();
     }
     
@@ -208,7 +501,7 @@ class VisualNovelGame {
         this.elements.textInput.focus();
     }
     
-    handleTextSubmit() {
+    async handleTextSubmit() {
         const input = this.elements.textInput.value.trim();
         if (!input) return;
         
@@ -222,20 +515,46 @@ class VisualNovelGame {
         });
         
         // Generate appropriate response
-        const response = this.generateFactResponse(factType, input);
         this.elements.textInputContainer.classList.add('hidden');
         
         setTimeout(async () => {
-            await this.displayMessage(response);
-            this.state.currentStep++;
-            
-            setTimeout(() => {
-                this.collectNextFact();
-            }, 1000);
+            try {
+                const response = await this.generateFactResponse(factType, input);
+                await this.displayMessage(response);
+                this.state.currentStep++;
+                
+                setTimeout(() => {
+                    this.collectNextFact();
+                }, 1000);
+            } catch (error) {
+                console.error('Error generating response:', error);
+                // Fallback to static response
+                const fallbackResponse = window.fallbackSystem.generateResponse('introduction', {
+                    factType: factType,
+                    value: input
+                });
+                await this.displayMessage(fallbackResponse.response);
+                this.state.currentStep++;
+                
+                setTimeout(() => {
+                    this.collectNextFact();
+                }, 1000);
+            }
         }, this.getTypingDelay());
     }
     
-    generateFactResponse(factType, value) {
+    async generateFactResponse(factType, value) {
+        // Use LLM if enabled and available
+        if (this.state.llmEnabled && window.apiConfig.isOnline) {
+            try {
+                return await this.generateLLMResponse('introduction', { factType, value });
+            } catch (error) {
+                console.warn('LLM request failed, falling back to static response:', error);
+                // Fall through to static response
+            }
+        }
+        
+        // Fallback to static responses
         const responses = {
             name: [`Nice to meet you, ${value}!`, `Great, ${value} is a lovely name!`, `Thanks for sharing, ${value}!`],
             favFood: [`${value} sounds delicious!`, `I bet ${value} is really tasty!`, `Interesting choice with ${value}!`],
@@ -249,8 +568,59 @@ class VisualNovelGame {
         return options[Math.floor(Math.random() * options.length)];
     }
     
+    /**
+     * Generate LLM response using prompt templates
+     */
+    async generateLLMResponse(phase, context = {}) {
+        try {
+            // Build context for the prompt
+            const dialogueContext = buildContext(
+                this.state.dialogue,
+                this.state.playerFacts,
+                this.state.dialogue.length + 1,
+                this.state.characterType === 'B'
+            );
+            
+            // Build the complete prompt
+            const prompt = buildPrompt(this.state.characterType, phase, dialogueContext, context);
+            
+            // Make API request
+            const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+            
+            // Parse response
+            const parsed = parseLLMResponse(response.content);
+            
+            // Update debug info
+            this.state.lastLLMThought = parsed.thought;
+            if (this.state.debugMode) {
+                this.updateDebugInfo();
+            }
+            
+            // Update usage stats
+            this.updateUsageStats();
+            
+            return parsed.response;
+        } catch (error) {
+            console.error('LLM generation failed:', error);
+            throw error;
+        }
+    }
+    
     async startQuiz() {
-        await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+        try {
+            let quizIntro;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                quizIntro = await this.generateLLMResponse('quiz', { 
+                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+                });
+            } else {
+                quizIntro = window.fallbackSystem.generateResponse('quiz').response;
+            }
+            await this.displayMessage(quizIntro);
+        } catch (error) {
+            console.error('Error generating quiz intro:', error);
+            await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+        }
         
         // Generate quiz questions with options
         this.prepareQuizQuestions();
@@ -402,8 +772,25 @@ class VisualNovelGame {
     }
     
     async startRating() {
-        const outroMessage = this.generatePersonalizedOutro();
-        await this.displayMessage(outroMessage);
+        try {
+            let outroMessage;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                outroMessage = await this.generateLLMResponse('outro', {
+                    facts: this.state.playerFacts,
+                    memoryImpaired: this.state.characterType === 'B'
+                });
+            } else {
+                outroMessage = window.fallbackSystem.generateResponse('outro', {
+                    facts: this.state.playerFacts,
+                    memoryImpaired: this.state.characterType === 'B'
+                }).response;
+            }
+            await this.displayMessage(outroMessage);
+        } catch (error) {
+            console.error('Error generating outro:', error);
+            const fallbackOutro = this.generatePersonalizedOutro();
+            await this.displayMessage(fallbackOutro);
+        }
         
         setTimeout(() => {
             this.showNextRating();
