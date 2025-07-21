@@ -24,10 +24,8 @@ class ConversationEngine {
 
     async initialize() {
         // Load API key from environment
-        // For client-side applications, environment variables aren't directly accessible
-        // This will work in build environments like Vite or when running with a server
-        this.apiKey = (typeof process !== 'undefined' && process.env?.OPENAI_API_KEY) || 
-                      (typeof window !== 'undefined' && window.env?.OPENAI_API_KEY) ||
+        this.apiKey = process.env.OPENAI_API_KEY || 
+                      (typeof import !== 'undefined' && import.meta.env?.VITE_OPENAI_API_KEY) ||
                       null;
         
         if (!this.apiKey) {
@@ -133,7 +131,7 @@ class ConversationEngine {
         ];
         return greetings[Math.floor(Math.random() * greetings.length)];
     }
-
+    
     initializeElements() {
         // Cache essential DOM elements
         this.elements = {
@@ -280,48 +278,43 @@ class ConversationEngine {
             return responses[Math.floor(Math.random() * responses.length)];
         }
     }
-
+    
     async startQuiz() {
-        this.currentPhase = 'quiz';
-        this.currentStep = 0;
-        this.updateProgressIndicator();
+        try {
+            let quizIntro;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                quizIntro = await this.generateLLMResponse('quiz', { 
+                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+                });
+            } else {
+                quizIntro = window.fallbackSystem.generateResponse('quiz').response;
+            }
+            await this.displayMessage(quizIntro);
+        } catch (error) {
+            console.error('Error generating quiz intro:', error);
+            await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+        }
         
-        const quizIntro = "Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!";
-        await this.displayMessage(quizIntro);
-        
+        // Generate quiz questions with options
         this.prepareQuizQuestions();
-        setTimeout(() => {
-            this.showNextQuizQuestion();
-        }, 2000);
+        this.showNextQuizQuestion();
     }
-
+    
     prepareQuizQuestions() {
-        const questions = [
-            "What did you tell me your name was?",
-            "You mentioned your favorite food earlier - what was it?",
-            "What hobby did you say you enjoy most?",
-            "Where did you say you like to go to relax?"
-        ];
+        const questions = this.dialogueData.quiz;
         
-        const factKeys = ['name', 'favFood', 'favHobby', 'favRelaxPlace'];
+        // Set correct answers based on player facts
+        questions.forEach(q => {
+            q.correctAnswer = this.state.playerFacts[q.factKey];
+            q.options = this.generateQuizOptions(q.correctAnswer, q.factKey);
+        });
         
-        this.quizQuestions = questions.map((question, index) => ({
-            question: question,
-            factKey: factKeys[index],
-            correctAnswer: this.factsCollected[factKeys[index]] || 'Unknown',
-            options: this.generateQuizOptions(this.factsCollected[factKeys[index]], factKeys[index])
-        }));
+        this.quizQuestions = questions;
     }
-
+    
     generateQuizOptions(correctAnswer, factType) {
-        const distractorSets = {
-            name: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan'],
-            favFood: ['Pizza', 'Sushi', 'Tacos', 'Pasta', 'Burgers', 'Ice cream'],
-            favHobby: ['Reading', 'Gaming', 'Cooking', 'Hiking', 'Music', 'Photography'],
-            favRelaxPlace: ['Beach', 'Mountains', 'Home', 'Park', 'Library', 'Coffee shop']
-        };
-        
-        const distractors = [...(distractorSets[factType] || [])];
+        // Generate plausible distractors
+        const distractors = this.getDistractors(factType);
         const options = [correctAnswer];
         
         // Add 2-3 distractors
@@ -335,7 +328,20 @@ class ConversationEngine {
         // Shuffle options
         return this.shuffleArray(options);
     }
-
+    
+    getDistractors(factType) {
+        const distractorSets = {
+            name: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan'],
+            favFood: ['Pizza', 'Sushi', 'Tacos', 'Pasta', 'Burgers', 'Ice cream'],
+            favHobby: ['Reading', 'Gaming', 'Cooking', 'Hiking', 'Music', 'Photography'],
+            favRelaxPlace: ['Beach', 'Mountains', 'Home', 'Park', 'Library', 'Coffee shop'],
+            profession: ['Teacher', 'Engineer', 'Artist', 'Writer', 'Doctor', 'Student'],
+            bonusFact: ['I love traveling', 'I have two cats', 'I speak three languages', 'I play guitar']
+        };
+        
+        return [...(distractorSets[factType] || [])];
+    }
+    
     shuffleArray(array) {
         const shuffled = [...array];
         for (let i = shuffled.length - 1; i > 0; i--) {
@@ -344,14 +350,15 @@ class ConversationEngine {
         }
         return shuffled;
     }
-
+    
     showNextQuizQuestion() {
-        if (this.currentStep >= this.quizQuestions.length) {
-            this.startRating();
+        if (this.state.currentStep >= this.quizQuestions.length) {
+            // Quiz complete
+            this.enterPhase('rating');
             return;
         }
         
-        const question = this.quizQuestions[this.currentStep];
+        const question = this.quizQuestions[this.state.currentStep];
         const shouldMakeError = this.shouldMakeMemoryError();
         
         this.elements.quizQuestion.textContent = question.question;
@@ -364,12 +371,12 @@ class ConversationEngine {
             const wrongOptions = question.options.filter(opt => opt !== question.correctAnswer);
             if (wrongOptions.length > 0) {
                 selectedAnswer = wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
-                this.memoryErrors++;
+                this.state.memoryErrors++;
                 this.logEvent('memory_error', {
                     question: question.question,
                     correct: question.correctAnswer,
                     selected: selectedAnswer,
-                    step: this.currentStep
+                    step: this.state.currentStep
                 });
             }
         }
@@ -394,13 +401,13 @@ class ConversationEngine {
             }
         }, this.getTypingDelay());
     }
-
+    
     shouldMakeMemoryError() {
-        if (this.characterType === 'A') return false; // Perfect memory
-        if (this.memoryErrors >= GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS) return false;
+        if (this.state.characterType === 'A') return false; // Perfect memory
+        if (this.state.memoryErrors >= GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS) return false;
         return Math.random() > GAME_CONFIG.MEMORY_ACCURACY.IMPAIRED;
     }
-
+    
     selectQuizOption(button, answer, question) {
         // Clear previous selections
         Array.from(this.elements.quizOptions.children).forEach(btn => {
@@ -411,7 +418,7 @@ class ConversationEngine {
         button.classList.add('selected');
         
         // Record answer
-        this.quizAnswers.push({
+        this.state.quizAnswers.push({
             question: question.question,
             correct: question.correctAnswer,
             selected: answer,
@@ -423,36 +430,49 @@ class ConversationEngine {
             correct: question.correctAnswer,
             selected: answer,
             isCorrect: answer === question.correctAnswer,
-            step: this.currentStep
+            step: this.state.currentStep
         });
         
         // Continue to next question after delay
         setTimeout(() => {
             this.elements.quizContainer.classList.add('hidden');
-            this.currentStep++;
+            this.state.currentStep++;
             
             setTimeout(() => {
                 this.showNextQuizQuestion();
             }, 1000);
         }, 2000);
     }
-
+    
     async startRating() {
-        this.currentPhase = 'rating';
-        this.currentStep = 0;
-        this.updateProgressIndicator();
-        
-        const outroMessage = this.generatePersonalizedOutro();
-        await this.displayMessage(outroMessage);
+        try {
+            let outroMessage;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                outroMessage = await this.generateLLMResponse('outro', {
+                    facts: this.state.playerFacts,
+                    memoryImpaired: this.state.characterType === 'B'
+                });
+            } else {
+                outroMessage = window.fallbackSystem.generateResponse('outro', {
+                    facts: this.state.playerFacts,
+                    memoryImpaired: this.state.characterType === 'B'
+                }).response;
+            }
+            await this.displayMessage(outroMessage);
+        } catch (error) {
+            console.error('Error generating outro:', error);
+            const fallbackOutro = this.generatePersonalizedOutro();
+            await this.displayMessage(fallbackOutro);
+        }
         
         setTimeout(() => {
             this.showNextRating();
         }, 2000);
     }
-
+    
     generatePersonalizedOutro() {
-        const facts = this.factsCollected;
-        const correctAnswers = this.quizAnswers.filter(a => a.isCorrect);
+        const facts = this.state.playerFacts;
+        const correctAnswers = this.state.quizAnswers.filter(a => a.isCorrect);
         
         let message = `Thank you for this wonderful conversation, ${facts.name || 'friend'}! `;
         
@@ -469,19 +489,16 @@ class ConversationEngine {
         message += "I hope you enjoyed our chat as much as I did!";
         return message;
     }
-
+    
     showNextRating() {
-        const ratings = [
-            "How human-like did this AI assistant seem to you?",
-            "How much would you want to interact with this assistant again?"
-        ];
-        
-        if (this.currentStep >= ratings.length) {
-            this.completeSession();
+        const ratings = this.dialogueData.ratings;
+        if (this.state.currentStep >= ratings.length) {
+            // Rating complete
+            this.enterPhase('complete');
             return;
         }
         
-        const question = ratings[this.currentStep];
+        const question = ratings[this.state.currentStep];
         this.elements.ratingQuestion.textContent = question;
         
         // Clear previous selections
@@ -491,7 +508,7 @@ class ConversationEngine {
         
         this.elements.ratingContainer.classList.remove('hidden');
     }
-
+    
     handleRatingSelect(button) {
         // Clear previous selections
         Array.from(this.elements.scaleButtons.children).forEach(btn => {
@@ -502,70 +519,67 @@ class ConversationEngine {
         button.classList.add('selected');
         
         const ratingValue = parseInt(button.dataset.value);
-        const ratingKey = this.currentStep === 0 ? 'humanness' : 'desirability';
+        const ratingKey = this.state.currentStep === 0 ? 'humanness' : 'desirability';
         
-        this.ratings[ratingKey] = ratingValue;
+        this.state.ratings[ratingKey] = ratingValue;
         
         this.logEvent('rating_submitted', {
-            question: this.elements.ratingQuestion.textContent,
+            question: this.dialogueData.ratings[this.state.currentStep],
             rating: ratingValue,
             ratingType: ratingKey,
-            step: this.currentStep
+            step: this.state.currentStep
         });
         
         // Continue to next rating after delay
         setTimeout(() => {
             this.elements.ratingContainer.classList.add('hidden');
-            this.currentStep++;
+            this.state.currentStep++;
             
             setTimeout(() => {
                 this.showNextRating();
             }, 1000);
         }, 1500);
     }
-
+    
     completeSession() {
-        this.currentPhase = 'complete';
-        this.updateProgressIndicator();
-        
-        const endTime = Date.now();
-        const duration = endTime - this.startTime;
+        this.state.endTime = Date.now();
+        this.state.duration = this.state.endTime - this.state.startTime;
         
         this.logEvent('session_complete', {
-            duration: duration,
-            totalQuestions: this.quizAnswers.length,
-            correctAnswers: this.quizAnswers.filter(a => a.isCorrect).length,
-            memoryErrors: this.memoryErrors,
-            ratings: this.ratings
+            duration: this.state.duration,
+            totalQuestions: this.state.quizAnswers.length,
+            correctAnswers: this.state.quizAnswers.filter(a => a.isCorrect).length,
+            memoryErrors: this.state.memoryErrors,
+            ratings: this.state.ratings
         });
         
         this.elements.completionStatus.textContent = 
-            `Session completed in ${Math.round(duration / 60000)} minutes`;
+            `Session completed in ${Math.round(this.state.duration / 60000)} minutes`;
         this.elements.restartButton.classList.remove('hidden');
         
         // Show data export option
         this.prepareDataExport();
         this.elements.dataExport.classList.remove('hidden');
     }
-
+    
     prepareDataExport() {
         const exportData = {
-            sessionId: this.sessionId,
-            characterType: this.characterType,
+            sessionId: this.state.sessionId,
+            characterType: this.state.characterType,
             memoryImpaired: GAME_CONFIG.MEMORY_IMPAIRED,
-            startTime: this.startTime,
-            endTime: Date.now(),
-            duration: Date.now() - this.startTime,
-            factsCollected: this.factsCollected,
-            quizAnswers: this.quizAnswers,
-            ratings: this.ratings,
-            memoryErrors: this.memoryErrors,
-            conversationHistory: this.conversationHistory
+            startTime: this.state.startTime,
+            endTime: this.state.endTime,
+            duration: this.state.duration,
+            playerFacts: this.state.playerFacts,
+            quizAnswers: this.state.quizAnswers,
+            ratings: this.state.ratings,
+            memoryErrors: this.state.memoryErrors,
+            dialogue: this.state.dialogue
         };
         
         this.elements.sessionData.value = JSON.stringify(exportData, null, 2);
     }
-
+    
     downloadSessionData() {
         const data = this.elements.sessionData.value;
         const blob = new Blob([data], { type: 'application/json' });
@@ -573,17 +587,17 @@ class ConversationEngine {
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `session_data_${this.sessionId}.json`;
+        a.download = `session_data_${this.state.sessionId}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-
+    
     restartGame() {
         location.reload();
     }
-
+    
     async displayMessage(text) {
         this.elements.typingIndicator.classList.remove('hidden');
         
@@ -597,21 +611,21 @@ class ConversationEngine {
         // Log the message
         this.logEvent('message_displayed', {
             text: text,
-            phase: this.currentPhase,
-            step: this.currentStep
+            phase: this.state.phase,
+            step: this.state.currentStep
         });
         
-        // Add to conversation history
-        this.conversationHistory.push({
+        // Add to dialogue history
+        this.state.dialogue.push({
             timestamp: Date.now(),
             speaker: 'AI',
             text: text,
-            phase: this.currentPhase
+            phase: this.state.phase
         });
     }
-
+    
     getTypingDelay() {
-        if (this.characterType === 'A') {
+        if (this.state.characterType === 'A') {
             // Character A gets artificial delay for parity
             return Math.random() * (GAME_CONFIG.TYPING_DELAY.MAX - GAME_CONFIG.TYPING_DELAY.MIN) + GAME_CONFIG.TYPING_DELAY.MIN;
         } else {
@@ -619,12 +633,12 @@ class ConversationEngine {
             return Math.random() * 200 + 100;
         }
     }
-
+    
     logEvent(eventType, data) {
         console.log(`[${new Date().toISOString()}] ${eventType}:`, data);
         // In a real implementation, this would send data to a research server
     }
-
+    
     advanceDialogue() {
         // Generic continue function for dialogue advancement
         this.elements.continueContainer.classList.add('hidden');
@@ -632,8 +646,7 @@ class ConversationEngine {
     }
 }
 
-// Initialize when page loads
-window.addEventListener('load', async () => {
-    const conversation = new ConversationEngine();
-    await conversation.initialize();
+// Initialize game when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    window.game = new VisualNovelGame();
 });

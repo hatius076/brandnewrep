@@ -1,6 +1,6 @@
 # HCI Memory-Fidelity Visual Novel
 
-A complete HTML/CSS/JavaScript implementation of a visual novel game that tests how AI character memory accuracy influences user perception. This research tool now features **dynamic LLM-driven AI characters** with real-time OpenAI API integration for truly personalized conversations.
+A complete HTML/CSS/JavaScript implementation of a visual novel game that tests how AI character memory accuracy influences user perception. This research tool features **simple .env file API key management** for easy setup and deployment.
 
 ## Overview
 
@@ -8,26 +8,44 @@ This application implements a controlled experiment comparing user perceptions o
 - **Character A**: Perfect memory recall (100% accuracy)
 - **Character B**: Impaired memory (~50% accuracy, max 3 errors)
 
-**🆕 LLM Integration**: The application now supports real OpenAI GPT-4 API calls for dynamic, context-aware AI responses while maintaining experimental validity through proper controls and fallback systems.
-
 Users interact with one randomly assigned character through a structured conversation, followed by a memory quiz and rating scales.
+
+## 🚀 Quick Setup
+
+### 1. Get OpenAI API Key
+- Visit [OpenAI API](https://platform.openai.com/api-keys)
+- Create an account and generate an API key
+- Ensure you have available credits/usage quota
+
+### 2. Create .env File
+1. Copy the template: `cp .env.template .env`
+2. Edit the `.env` file and add your API key:
+   ```
+   OPENAI_API_KEY=sk-your-actual-api-key-here
+   ```
+
+### 3. Run the Application
+- **Development**: Use any local server (Python, Node.js, etc.)
+  ```bash
+  python3 -m http.server 8000
+  # or
+  npx serve .
+  ```
+- **Production**: Deploy to any static hosting service
+
+### 4. Start Session
+- Open the application in your browser
+- The conversation will start automatically if the API key is found
+- No manual configuration or settings required!
 
 ## Features
 
 ### Core Functionality
-- **Dual-mode operation** - LLM-driven responses or offline fallback
 - **Target duration**: 10-20 minutes per session
 - **Random character assignment** - 50% chance of each character type
 - **Blinded experimental design** - Players unaware of character type
 - **Comprehensive data logging** - Full interaction tracking for research
-
-### 🤖 LLM Integration Features
-- **OpenAI GPT-4 API support** - Real-time dynamic responses
-- **Memory fidelity testing** - Character B implements controlled memory errors
-- **Structured prompt system** - [THOUGHT] and [RESPONSE] format as specified
-- **Context management** - Full dialogue history with fact tracking
-- **Fallback system** - Graceful degradation to offline mode
-- **Debug mode** - View AI reasoning process for research
+- **Simple .env file setup** - No complex encryption or UI needed
 
 ### Game Flow
 1. **Introduction Phase**: AI collects 6 personal facts from player
@@ -40,74 +58,48 @@ Users interact with one randomly assigned character through a structured convers
 - **Parity controls** ensuring length/timing consistency between characters
 - **Responsive design** supporting mouse/touch input
 - **Cross-browser compatibility** with vanilla HTML/CSS/JavaScript
+- **Environment variable support** for API key management
 
-## 🚀 Setup and Usage
+## Error Handling
 
-### Quick Start (Offline Mode)
-1. Open `index.html` in any modern web browser
-2. No server setup required - fully offline capable
-3. Session begins automatically with random character assignment
+### Without .env File:
+![Error State](https://github.com/user-attachments/assets/84913112-6624-46cc-89a6-45e87a398d23)
 
-### 🔑 API Setup (LLM Mode)
-1. **Get OpenAI API Key**:
-   - Visit [OpenAI API](https://platform.openai.com/api-keys)
-   - Create an account and generate an API key
-   - Ensure you have available credits/usage quota
+Clear instructions guide users to create the .env file with their API key.
 
-2. **Configure API Access**:
-   - Open the application in your browser
-   - Click the **⚙️ Settings** button in the header
-   - Enter your OpenAI API key in the provided field
-   - Select your preferred model (GPT-4 recommended)
-   - Click **Test API** to verify connection
-   - Click **Save Settings**
+### With .env File:
+- System loads key automatically
+- Conversation starts immediately
+- No prompts or setup screens needed
 
-3. **Security Notice**: 
-   - ⚠️ Your API key is stored locally in your browser
-   - Keys are sent directly to OpenAI (client-side only)
-   - Never share your API key or use on untrusted devices
-   - Consider using a separate API key for research purposes
+## For Sharing
 
-### Configuration Options
-
-**API Settings**:
-- **Model Selection**: GPT-4, GPT-4 Turbo, or GPT-3.5 Turbo
-- **Online/Offline Toggle**: Switch between LLM and static responses
-- **Debug Mode**: Show AI [THOUGHT] processes for research analysis
-- **Usage Tracking**: Monitor API requests and estimated costs
-
-**Research Controls**:
-- **Character Type**: Automatically randomized (A or B)
-- **Memory Errors**: Max 3 controlled errors for Character B
-- **Response Parity**: ±5 token length consistency maintained
-- **Context Management**: Full dialogue history with fact extraction
-
-### For Researchers
-- Session data exported as structured JSON
-- Includes all dialogue, timing, accuracy metrics, and ratings
-- **NEW**: LLM metadata including reasoning traces and API usage
-- Template available in `data/log_template.json`
+When sharing the application:
+1. Share the code without the .env file (automatically excluded by .gitignore)
+2. Recipients create their own .env file with their API key
+3. No encryption or complex setup needed
+4. Each user manages their own API costs
 
 ## File Structure
 
 ```
 ├── index.html          # Main application interface
 ├── style.css           # Responsive styling and layout
-├── script.js           # Enhanced game engine with LLM integration
+├── script.js           # Simplified game engine with .env API key loading
 ├── config/
-│   ├── flags.js        # Configuration and randomization
-│   └── api.js          # 🆕 LLM API client and management
-├── prompts/
-│   ├── templates.js    # 🆕 LLM prompt templates and parsing
-│   ├── companion_A.txt # Perfect memory character profile
-│   └── companion_B.txt # Impaired memory character profile  
-├── data/
-│   └── log_template.json # Data export template
-└── scenes/
-    ├── scene_intro.txt  # Introduction phase documentation
-    ├── scene_quiz.txt   # Quiz phase documentation
-    └── scene_outro.txt  # Rating phase documentation
+│   └── flags.js        # Configuration and randomization
+├── .env.template       # Template for API key setup
+├── .env               # Your API key (excluded from git)
+├── .gitignore         # Excludes .env files from version control
+└── data/
+    └── log_template.json # Data export template
 ```
+
+## API Cost Estimation
+
+**Approximate costs per session**:
+- **GPT-3.5 Turbo**: $0.02 - $0.05 per complete session
+- **Session length**: 10-20 turns, ~1000-3000 tokens total
 
 ## Experimental Design
 
@@ -115,25 +107,17 @@ Users interact with one randomly assigned character through a structured convers
 - **Character A**: Perfect recall, artificial latency for parity
 - **Character B**: Memory errors via fact dropout/masking, natural timing
 
-### 🧠 LLM Memory Implementation
-- **Context Filtering**: Character B receives masked/dropped facts
-- **Error Types**: Confident-wrong vs hedged responses  
-- **Randomization**: 3 random facts selected for forgetting
-- **Consistency**: Character personalities identical across types
-
 ### Controls
 - Identical personality and helpfulness across characters
-- Response length parity (±5 tokens)
+- Response length parity maintained
 - Blinded participant experience  
 - Randomized character assignment per session
-- **NEW**: Token-level response monitoring and adjustment
 
 ### Data Collection
 - Complete dialogue transcripts with timestamps
 - Memory accuracy metrics (correct/incorrect responses)
 - User ratings on 7-point Likert scales
 - Session duration and interaction patterns
-- **NEW**: LLM reasoning traces and API usage statistics
 
 ## 🔬 Research Applications
 
@@ -142,20 +126,6 @@ This tool is designed for HCI research investigating:
 - Perception of AI human-likeness  
 - Factors affecting willingness to interact with AI systems
 - Memory as a component of AI believability
-- **NEW**: LLM reasoning transparency and user perception
-- **NEW**: Dynamic vs static response effectiveness
-
-## API Cost Estimation
-
-**Approximate costs per session**:
-- **GPT-4**: $0.10 - $0.30 per complete session
-- **GPT-3.5 Turbo**: $0.02 - $0.05 per complete session
-- **Session length**: 10-20 turns, ~1000-3000 tokens total
-
-**Cost optimization**:
-- Use GPT-3.5 Turbo for preliminary testing
-- Enable offline mode to avoid API costs during development
-- Monitor usage through the built-in tracking system
 
 ## Browser Compatibility
 
@@ -168,30 +138,11 @@ Tested and compatible with:
 ## Troubleshooting
 
 **API Issues**:
-- ❌ **Connection Failed**: Check API key and internet connection
-- ❌ **Rate Limits**: Built-in rate limiting prevents most issues
+- ❌ **No API Key**: Create .env file with OPENAI_API_KEY=your_key
+- ❌ **Invalid Key**: Check your API key format and OpenAI account status
 - ❌ **Quota Exceeded**: Check OpenAI account billing and usage
-- ✅ **Automatic Fallback**: Application continues offline if API fails
-
-**Debug Mode**:
-- Enable in Settings to see AI reasoning processes
-- Use for understanding character behavior differences
-- Helpful for research validation and analysis
+- ✅ **Automatic Error Messages**: Clear instructions guide users to solutions
 
 ## License
 
 This implementation is provided for research and educational purposes.
-
-## Screenshots
-
-![Initial Application](https://github.com/user-attachments/assets/e366ca1c-fd75-4e8a-bc59-d58cd04c6c96)
-*Enhanced interface with LLM integration - conversation flows naturally*
-
-![LLM Settings Interface](https://github.com/user-attachments/assets/80860681-f11e-4d45-adf9-badbbc3f8cae)
-*Comprehensive API configuration with security warnings and usage tracking*
-
-![Rating Phase](https://github.com/user-attachments/assets/72f797df-968c-486c-bbcb-d93cc943ca54)
-*Rating phase - 7-point Likert scales for human-likeness assessment*
-
-![Completion](https://github.com/user-attachments/assets/569c3cbb-ba81-4630-853b-5d141628abe8)
-*Session completion with comprehensive data export functionality*
