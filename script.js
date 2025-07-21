@@ -986,10 +986,8 @@ Respond with just the question, no additional text.`;
             } catch (error) {
                 console.error('Error generating response:', error);
                 this.hideLoadingAnimation();
-                // Continue with a natural acknowledgment instead of blocking
-                console.log('🔄 Continuing with natural acknowledgment...');
-                const naturalResponse = this.getNaturalFallbackAcknowledgment(factType, input);
-                await this.displayMessage(naturalResponse);
+                // Show API error directly to the user - no fallback logic
+                await this.displayMessage(`API Error: ${error.message}`);
                 this.state.currentStep++;
                 
                 setTimeout(() => {
@@ -1000,40 +998,45 @@ Respond with just the question, no additional text.`;
     }
     
     /**
-     * Generic API placeholder for generating acknowledgments
-     * Simulates an AI acknowledgment API call
+     * Make real AI API call to generate acknowledgment
+     * Uses actual OpenAI API to create personalized responses
      */
     async callAIAcknowledgmentAPI(factType, input) {
-        // Simulate API call delay and potential failure
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
-        
-        // Simulate random API failures (20% chance)
-        if (Math.random() < 0.2) {
-            throw new Error('API service unavailable');
+        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+            throw new Error('API is required but not available');
         }
         
-        // Simulate successful API response
-        return `Thank you for sharing that ${factType}! I appreciate you telling me about ${input}.`;
+        const systemPrompt = `You are a warm, engaging AI assistant having a natural conversation. Respond to what the person just shared with genuine interest and warmth. Keep responses conversational and brief (1-2 sentences).`;
+        
+        const userPrompt = `The person just told me about their ${factType}: "${input}"
+
+Respond with:
+1. Genuine acknowledgment of what they shared
+2. A warm, brief reaction showing you're listening  
+3. Natural enthusiasm about learning about them
+
+Keep it conversational and authentic. Be brief but warm.`;
+        
+        try {
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 80,
+                temperature: 0.7
+            });
+            
+            return response.content.trim();
+        } catch (error) {
+            console.error('Failed to generate AI acknowledgment:', error);
+            throw error;
+        }
     }
 
     /**
-     * Always call AI API to generate acknowledgment, no fallback logic
+     * Generate acknowledgment using only real AI API calls - no fallback logic
      */
     async generateNaturalAcknowledgment(factType, input) {
-        try {
-            return await this.callAIAcknowledgmentAPI(factType, input);
-        } catch (error) {
-            console.error('API call failed:', error);
-            return 'API unavailable. Unable to generate acknowledgment.';
-        }
+        return await this.callAIAcknowledgmentAPI(factType, input);
     }
-    
-    /**
-     * Fallback function modified to return same API error message
-     */
-    getNaturalFallbackAcknowledgment(factType, input) {
-        return 'API unavailable. Unable to generate acknowledgment.';
-    }
+
     
     /**
      * Get natural pause duration between questions
