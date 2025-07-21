@@ -154,16 +154,28 @@ class VisualNovelGame {
         this.elements.toggleDebug.addEventListener('click', () => this.toggleDebugPanel());
     }
     
-    /**
-     * Initialize Warden AI system
-     */
-    initializeWarden() {
-        if (this.state.wardenEnabled && window.WardenAI) {
-            this.warden = new WardenAI(this);
-            console.log('[Game] Warden AI system initialized');
-        } else {
-            console.log('[Game] Running in legacy mode without Warden');
-        }
+    async loadDialogueData() {
+        // In a real implementation, this would load from JSON files
+        // For now, we'll use embedded dialogue data
+        this.dialogueData = {
+            introduction: {
+                greeting: this.getGreetingMessage(),
+                factPrompts: {
+                    name: "What's your name? I'd love to know what to call you!",
+                    favFood: "What's your favorite food? I'm curious about your tastes!",
+                    favHobby: "What hobby do you enjoy most in your free time?",
+                    favRelaxPlace: "Where do you like to go to relax and unwind?",
+                    profession: "What do you do for work or study?",
+                    bonusFact: "Tell me something interesting about yourself!"
+                }
+            },
+            quiz: this.generateQuizQuestions(),
+            outro: this.getOutroMessage(),
+            ratings: [
+                "How human-like did this AI assistant seem to you?",
+                "How much would you want to interact with this assistant again?"
+            ]
+        };
     }
     
     /**
@@ -180,6 +192,9 @@ class VisualNovelGame {
         this.updateDebugInfo();
     }
     
+    /**
+     * Load LLM settings from storage and update UI
+     */
     loadLLMSettings() {
         try {
             const saved = localStorage.getItem('llm_ui_settings');
@@ -202,17 +217,25 @@ class VisualNovelGame {
         this.updateApiStatus();
     }
     
-    // Settings modal functions (keeping existing implementation)
+    /**
+     * Open settings modal
+     */
     openSettingsModal() {
         this.elements.settingsModal.classList.remove('hidden');
         this.updateApiStatus();
         this.updateUsageStats();
     }
     
+    /**
+     * Close settings modal
+     */
     closeSettingsModal() {
         this.elements.settingsModal.classList.add('hidden');
     }
     
+    /**
+     * Test API connection
+     */
     async testApiConnection() {
         const apiKey = this.elements.apiKeyInput.value.trim();
         if (!apiKey) {
@@ -243,6 +266,9 @@ class VisualNovelGame {
         }
     }
     
+    /**
+     * Save settings
+     */
     saveSettings() {
         const apiKey = this.elements.apiKeyInput.value.trim();
         const model = this.elements.modelSelect.value;
@@ -276,6 +302,9 @@ class VisualNovelGame {
         }
     }
     
+    /**
+     * Clear all settings
+     */
     clearSettings() {
         if (confirm('Are you sure you want to clear all API settings and data?')) {
             window.apiConfig.clearConfig();
@@ -295,6 +324,9 @@ class VisualNovelGame {
         }
     }
     
+    /**
+     * Toggle debug mode
+     */
     toggleDebugMode() {
         this.state.debugMode = this.elements.debugModeCheckbox.checked;
         if (this.state.debugMode) {
@@ -305,12 +337,18 @@ class VisualNovelGame {
         this.updateDebugInfo();
     }
     
+    /**
+     * Toggle offline mode
+     */
     toggleOfflineMode() {
         const offlineMode = this.elements.offlineModeCheckbox.checked;
         this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
         this.updateApiStatus();
     }
     
+    /**
+     * Toggle debug panel visibility
+     */
     toggleDebugPanel() {
         const content = this.elements.debugPanel.querySelector('.debug-content');
         const toggleBtn = this.elements.toggleDebug;
@@ -324,6 +362,9 @@ class VisualNovelGame {
         }
     }
     
+    /**
+     * Update API status display
+     */
     updateApiStatus() {
         let status = 'Not configured';
         let className = 'offline';
@@ -343,6 +384,9 @@ class VisualNovelGame {
         this.elements.statusIndicator.className = className;
     }
     
+    /**
+     * Update usage statistics display
+     */
     updateUsageStats() {
         const stats = window.apiConfig.getUsageStats();
         this.elements.requestCount.textContent = stats.requestCount;
@@ -353,6 +397,9 @@ class VisualNovelGame {
         }
     }
     
+    /**
+     * Update debug information
+     */
     updateDebugInfo() {
         this.elements.debugCharacter.textContent = 
             `Character ${this.state.characterType} (${this.state.characterType === 'A' ? 'Perfect Memory' : 'Impaired Memory'})`;
@@ -363,41 +410,51 @@ class VisualNovelGame {
         if (this.state.lastLLMThought) {
             this.elements.debugThought.textContent = this.state.lastLLMThought;
         }
-        
-        // Add Warden info if available
-        if (this.warden) {
-            const wardenState = this.warden.getState();
-            this.elements.debugMemory.textContent += ` | Facts: ${wardenState.factsCollected}/${wardenState.maxFacts}`;
-        }
     }
-
+    
+    getGreetingMessage() {
+        const greetings = [
+            "Hello! I'm an AI assistant and I'm excited to chat with you today. I'd love to learn a bit about you so we can have a more personal conversation.",
+            "Hi there! I'm an AI that enjoys getting to know people. I hope you don't mind if I ask you a few questions about yourself so I can better understand who you're.",
+            "Welcome! I'm an AI assistant, and I find that conversations are much more engaging when I know something about the person I'm talking with. Would you mind sharing some details about yourself?"
+        ];
+        return greetings[Math.floor(Math.random() * greetings.length)];
+    }
+    
+    generateQuizQuestions() {
+        const questionTemplates = [
+            "What did you tell me your name was?",
+            "You mentioned your favorite food earlier - what was it?",
+            "What hobby did you say you enjoy most?",
+            "Where did you say you like to go to relax?"
+        ];
+        
+        const factKeys = ['name', 'favFood', 'favHobby', 'favRelaxPlace'];
+        
+        return questionTemplates.map((template, index) => ({
+            question: template,
+            factKey: factKeys[index],
+            correctAnswer: null, // Will be set based on player input
+            options: [] // Will be generated with distractors
+        }));
+    }
+    
+    getOutroMessage() {
+        // This will be customized based on remembered/forgotten facts
+        return "Thank you for this wonderful conversation! It was great getting to know you.";
+    }
+    
     startGame() {
         this.elements.sessionId.textContent = `Session: ${this.state.sessionId}`;
         this.updateProgressIndicator();
-        this.logEvent('game_start', { 
-            characterType: this.state.characterType,
-            wardenEnabled: this.state.wardenEnabled
-        });
-        
-        if (this.state.wardenEnabled && this.warden) {
-            // Use Warden AI for conversation management
-            this.warden.initialize();
-        } else {
-            // Fallback to legacy system
-            this.enterPhase('introduction');
-        }
+        this.logEvent('game_start', { characterType: this.state.characterType });
+        this.enterPhase('introduction');
     }
     
     updateProgressIndicator() {
         const phases = ['Introduction', 'Quiz', 'Rating', 'Complete'];
         const currentPhaseIndex = ['introduction', 'quiz', 'rating', 'complete'].indexOf(this.state.phase);
         this.elements.progressIndicator.textContent = `${phases[currentPhaseIndex] || 'Starting'}`;
-        
-        // Add fact collection progress if in introduction phase
-        if (this.state.phase === 'introduction' && this.warden) {
-            const wardenState = this.warden.getState();
-            this.elements.progressIndicator.textContent += ` (${wardenState.factsCollected}/${wardenState.maxFacts} facts)`;
-        }
     }
     
     enterPhase(phase) {
@@ -408,13 +465,10 @@ class VisualNovelGame {
         
         switch (phase) {
             case 'introduction':
-                if (!this.state.wardenEnabled) {
-                    this.startLegacyIntroduction();
-                }
-                // If Warden is enabled, it handles introduction
+                this.startIntroduction();
                 break;
             case 'quiz':
-                this.startQuizPhase();
+                this.startQuiz();
                 break;
             case 'rating':
                 this.startRating();
@@ -432,41 +486,48 @@ class VisualNovelGame {
         this.elements.continueContainer.classList.add('hidden');
     }
     
-    /**
-     * Show fact collection input (called by Warden)
-     */
-    showFactCollectionInput() {
-        this.elements.inputLabel.textContent = 'Tell me more about yourself!';
+    async startIntroduction() {
+        try {
+            let greeting;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                greeting = await this.generateLLMResponse('introduction', { 
+                    customPrompt: "Greet the user warmly and ask to learn about them. Be friendly and personable." 
+                });
+            } else {
+                greeting = window.fallbackSystem.generateResponse('introduction').response;
+            }
+            await this.displayMessage(greeting);
+        } catch (error) {
+            console.error('Error generating greeting:', error);
+            const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
+            await this.displayMessage(fallbackGreeting);
+        }
+        this.collectNextFact();
+    }
+    
+    collectNextFact() {
+        const factTypes = GAME_CONFIG.FACT_TYPES;
+        if (this.state.currentStep >= factTypes.length) {
+            // All facts collected, move to quiz
+            this.enterPhase('quiz');
+            return;
+        }
+        
+        const currentFactType = factTypes[this.state.currentStep];
+        const prompt = this.dialogueData.introduction.factPrompts[currentFactType];
+        
+        this.elements.inputLabel.textContent = prompt;
         this.elements.textInput.value = '';
-        this.elements.textInput.placeholder = 'Share something interesting about yourself...';
+        this.elements.textInput.placeholder = 'Type your response here...';
         this.elements.textInputContainer.classList.remove('hidden');
         this.elements.textInput.focus();
     }
     
-    /**
-     * Handle text submission (enhanced for Warden)
-     */
     async handleTextSubmit() {
         const input = this.elements.textInput.value.trim();
         if (!input) return;
         
-        // Hide input while processing
-        this.elements.textInputContainer.classList.add('hidden');
-        
-        if (this.state.wardenEnabled && this.warden) {
-            // Use Warden to process input
-            await this.warden.processUserInput(input);
-        } else {
-            // Fallback to legacy system
-            await this.handleLegacyTextSubmit(input);
-        }
-    }
-    
-    /**
-     * Legacy text submission for backwards compatibility
-     */
-    async handleLegacyTextSubmit(input) {
-        const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep] || 'general';
+        const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep];
         this.state.playerFacts[factType] = input;
         
         this.logEvent('fact_collected', {
@@ -475,7 +536,9 @@ class VisualNovelGame {
             step: this.state.currentStep
         });
         
-        // Generate response
+        // Generate appropriate response
+        this.elements.textInputContainer.classList.add('hidden');
+        
         setTimeout(async () => {
             try {
                 const response = await this.generateFactResponse(factType, input);
@@ -483,175 +546,272 @@ class VisualNovelGame {
                 this.state.currentStep++;
                 
                 setTimeout(() => {
-                    if (this.state.currentStep < GAME_CONFIG.FACT_TYPES.length) {
-                        this.showFactCollectionInput();
-                    } else {
-                        this.enterPhase('quiz');
-                    }
+                    this.collectNextFact();
                 }, 1000);
             } catch (error) {
                 console.error('Error generating response:', error);
-                await this.displayMessage("Thank you for sharing that with me!");
+                // Fallback to static response
+                const fallbackResponse = window.fallbackSystem.generateResponse('introduction', {
+                    factType: factType,
+                    value: input
+                });
+                await this.displayMessage(fallbackResponse.response);
                 this.state.currentStep++;
+                
+                setTimeout(() => {
+                    this.collectNextFact();
+                }, 1000);
             }
         }, this.getTypingDelay());
     }
     
-    /**
-     * Start quiz phase with new user-controlled questions
-     */
-    startQuizPhase() {
-        this.state.phase = 'quiz';
-        this.state.quizPhaseActive = true;
-        this.state.userQuestionsAsked = 0;
-        
-        // Show quiz intro
-        this.elements.quizIntroText.textContent = "Now you can test my memory! Ask me anything about what we discussed.";
-        this.showUserQuestionInput();
-    }
-    
-    /**
-     * Show user question input interface
-     */
-    showUserQuestionInput() {
-        this.elements.quizContainer.classList.remove('hidden');
-        this.elements.userQuestionContainer.classList.remove('hidden');
-        this.elements.quizResponseContainer.classList.add('hidden');
-        this.elements.userQuestionInput.value = '';
-        this.elements.userQuestionInput.focus();
-    }
-    
-    /**
-     * Handle user-generated quiz question
-     */
-    async handleUserQuestion() {
-        const question = this.elements.userQuestionInput.value.trim();
-        if (!question) return;
-        
-        this.state.userQuestionsAsked++;
-        
-        // Hide question input, show loading
-        this.elements.userQuestionContainer.classList.add('hidden');
-        this.elements.typingIndicator.classList.remove('hidden');
-        
-        try {
-            let response;
-            if (this.state.wardenEnabled && this.warden) {
-                // Use Warden to handle question
-                await this.warden.handleUserQuestion(question);
-                return; // Warden will handle the display
-            } else {
-                // Legacy fallback
-                response = await this.generateQuizResponse(question);
-            }
-            
-            // Show response
-            this.elements.typingIndicator.classList.add('hidden');
-            this.elements.quizResponseText.textContent = response;
-            this.elements.quizResponseContainer.classList.remove('hidden');
-            
-            // Log the interaction
-            this.logEvent('user_question_answered', {
-                question: question,
-                response: response,
-                questionNumber: this.state.userQuestionsAsked
-            });
-            
-        } catch (error) {
-            console.error('Error generating quiz response:', error);
-            this.elements.typingIndicator.classList.add('hidden');
-            this.elements.quizResponseText.textContent = "I'm having trouble remembering that. Could you ask something else?";
-            this.elements.quizResponseContainer.classList.remove('hidden');
-        }
-    }
-    
-    /**
-     * Generate response to user quiz question (legacy fallback)
-     */
-    async generateQuizResponse(question) {
-        // Simple fallback for when Warden is not available
-        const facts = this.state.playerFacts;
-        const factValues = Object.values(facts);
-        
-        if (factValues.length === 0) {
-            return "I don't think we've talked about that yet.";
-        }
-        
-        // Try to match question to a fact
-        const questionLower = question.toLowerCase();
-        for (const [key, value] of Object.entries(facts)) {
-            if (questionLower.includes(key) || questionLower.includes(value.toLowerCase())) {
-                return `I remember you mentioned ${value}!`;
-            }
-        }
-        
-        // Default response if no match
-        return "Let me think... I remember you sharing something about that, but I can't recall the exact details.";
-    }
-    
-    /**
-     * Finish quiz phase and move to rating
-     */
-    finishQuizPhase() {
-        this.state.quizPhaseActive = false;
-        this.enterPhase('rating');
-    }
-    
-    async startLegacyIntroduction() {
-        // Legacy introduction for backwards compatibility
-        const greeting = "Hello! I'm excited to get to know you better. Tell me about yourself!";
-        await this.displayMessage(greeting);
-        setTimeout(() => {
-            this.showFactCollectionInput();
-        }, 1000);
-    }
-    
     async generateFactResponse(factType, value) {
-        // Legacy fact response generation
-        if (this.state.llmEnabled && window.apiConfig.isOnline && window.DynamicPrompts) {
+        // Use LLM if enabled and available
+        if (this.state.llmEnabled && window.apiConfig.isOnline) {
             try {
-                const prompt = window.DynamicPrompts.buildDynamicPrompt('fact_response', {
-                    characterType: this.state.characterType,
-                    userInput: value,
-                    facts: this.state.playerFacts
-                });
-                
-                const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
-                const parsed = parseLLMResponse(response.content);
-                
-                if (this.state.debugMode) {
-                    this.state.lastLLMThought = parsed.thought;
-                    this.updateDebugInfo();
-                }
-                
-                return parsed.response;
+                return await this.generateLLMResponse('introduction', { factType, value });
             } catch (error) {
-                console.warn('LLM request failed, using fallback:', error);
+                console.warn('LLM request failed, falling back to static response:', error);
+                // Fall through to static response
             }
         }
         
-        // Fallback responses
+        // Fallback to static responses
         const responses = {
-            name: [`Nice to meet you, ${value}!`, `Great, ${value} is a lovely name!`],
-            general: ['That\'s really interesting!', 'Thanks for sharing that!', 'I\'d love to hear more!']
+            name: [`Nice to meet you, ${value}!`, `Great, ${value} is a lovely name!`, `Thanks for sharing, ${value}!`],
+            favFood: [`${value} sounds delicious!`, `I bet ${value} is really tasty!`, `Interesting choice with ${value}!`],
+            favHobby: [`${value} sounds like a fun hobby!`, `That's cool that you enjoy ${value}!`, `${value} must be really enjoyable!`],
+            favRelaxPlace: [`${value} sounds like a peaceful place!`, `That sounds like a great spot to unwind!`, `I can imagine ${value} being very relaxing!`],
+            profession: [`That's interesting work!`, `Sounds like a meaningful profession!`, `Your work must be quite engaging!`],
+            bonusFact: [`That's really interesting!`, `What a cool fact about yourself!`, `Thanks for sharing that with me!`]
         };
         
-        const options = responses[factType] || responses.general;
+        const options = responses[factType] || ['Thanks for sharing that!'];
         return options[Math.floor(Math.random() * options.length)];
     }
     
-    async startRating() {
-        // Existing rating system implementation
-        let outroMessage = "Thank you for this wonderful conversation! I hope you enjoyed our chat as much as I did.";
+    /**
+     * Generate LLM response using prompt templates
+     */
+    async generateLLMResponse(phase, context = {}) {
+        try {
+            // Build context for the prompt
+            const dialogueContext = buildContext(
+                this.state.dialogue,
+                this.state.playerFacts,
+                this.state.dialogue.length + 1,
+                this.state.characterType === 'B'
+            );
+            
+            // Build the complete prompt
+            const prompt = buildPrompt(this.state.characterType, phase, dialogueContext, context);
+            
+            // Make API request
+            const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+            
+            // Parse response
+            const parsed = parseLLMResponse(response.content);
+            
+            // Update debug info
+            this.state.lastLLMThought = parsed.thought;
+            if (this.state.debugMode) {
+                this.updateDebugInfo();
+            }
+            
+            // Update usage stats
+            this.updateUsageStats();
+            
+            return parsed.response;
+        } catch (error) {
+            console.error('LLM generation failed:', error);
+            throw error;
+        }
+    }
+    
+    async startQuiz() {
+        try {
+            let quizIntro;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                quizIntro = await this.generateLLMResponse('quiz', { 
+                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+                });
+            } else {
+                quizIntro = window.fallbackSystem.generateResponse('quiz').response;
+            }
+            await this.displayMessage(quizIntro);
+        } catch (error) {
+            console.error('Error generating quiz intro:', error);
+            await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+        }
         
-        if (this.state.wardenEnabled && this.warden) {
-            // Use Warden to generate personalized outro
-            await this.warden.delegateToAgent('outro', {
-                instruction: 'Provide a warm, personalized goodbye using what you remember.',
-                facts: this.warden.state.factSlots
-            });
-        } else {
+        // Generate quiz questions with options
+        this.prepareQuizQuestions();
+        this.showNextQuizQuestion();
+    }
+    
+    prepareQuizQuestions() {
+        const questions = this.dialogueData.quiz;
+        
+        // Set correct answers based on player facts
+        questions.forEach(q => {
+            q.correctAnswer = this.state.playerFacts[q.factKey];
+            q.options = this.generateQuizOptions(q.correctAnswer, q.factKey);
+        });
+        
+        this.quizQuestions = questions;
+    }
+    
+    generateQuizOptions(correctAnswer, factType) {
+        // Generate plausible distractors
+        const distractors = this.getDistractors(factType);
+        const options = [correctAnswer];
+        
+        // Add 2-3 distractors
+        while (options.length < 4 && distractors.length > 0) {
+            const distractor = distractors.splice(Math.floor(Math.random() * distractors.length), 1)[0];
+            if (distractor !== correctAnswer) {
+                options.push(distractor);
+            }
+        }
+        
+        // Shuffle options
+        return this.shuffleArray(options);
+    }
+    
+    getDistractors(factType) {
+        const distractorSets = {
+            name: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan'],
+            favFood: ['Pizza', 'Sushi', 'Tacos', 'Pasta', 'Burgers', 'Ice cream'],
+            favHobby: ['Reading', 'Gaming', 'Cooking', 'Hiking', 'Music', 'Photography'],
+            favRelaxPlace: ['Beach', 'Mountains', 'Home', 'Park', 'Library', 'Coffee shop'],
+            profession: ['Teacher', 'Engineer', 'Artist', 'Writer', 'Doctor', 'Student'],
+            bonusFact: ['I love traveling', 'I have two cats', 'I speak three languages', 'I play guitar']
+        };
+        
+        return [...(distractorSets[factType] || [])];
+    }
+    
+    shuffleArray(array) {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    }
+    
+    showNextQuizQuestion() {
+        if (this.state.currentStep >= this.quizQuestions.length) {
+            // Quiz complete
+            this.enterPhase('rating');
+            return;
+        }
+        
+        const question = this.quizQuestions[this.state.currentStep];
+        const shouldMakeError = this.shouldMakeMemoryError();
+        
+        this.elements.quizQuestion.textContent = question.question;
+        this.elements.quizOptions.innerHTML = '';
+        
+        let selectedAnswer = question.correctAnswer;
+        
+        // Character B (memory impaired) may select wrong answer
+        if (shouldMakeError) {
+            const wrongOptions = question.options.filter(opt => opt !== question.correctAnswer);
+            if (wrongOptions.length > 0) {
+                selectedAnswer = wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
+                this.state.memoryErrors++;
+                this.logEvent('memory_error', {
+                    question: question.question,
+                    correct: question.correctAnswer,
+                    selected: selectedAnswer,
+                    step: this.state.currentStep
+                });
+            }
+        }
+        
+        // Create option buttons
+        question.options.forEach(option => {
+            const button = document.createElement('button');
+            button.className = 'quiz-option';
+            button.textContent = option;
+            button.addEventListener('click', () => this.selectQuizOption(button, option, question));
+            this.elements.quizOptions.appendChild(button);
+        });
+        
+        this.elements.quizContainer.classList.remove('hidden');
+        
+        // Auto-select answer after a delay (simulating AI thinking)
+        setTimeout(() => {
+            const targetButton = Array.from(this.elements.quizOptions.children)
+                .find(btn => btn.textContent === selectedAnswer);
+            if (targetButton) {
+                this.selectQuizOption(targetButton, selectedAnswer, question);
+            }
+        }, this.getTypingDelay());
+    }
+    
+    shouldMakeMemoryError() {
+        if (this.state.characterType === 'A') return false; // Perfect memory
+        if (this.state.memoryErrors >= GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS) return false;
+        return Math.random() > GAME_CONFIG.MEMORY_ACCURACY.IMPAIRED;
+    }
+    
+    selectQuizOption(button, answer, question) {
+        // Clear previous selections
+        Array.from(this.elements.quizOptions.children).forEach(btn => {
+            btn.classList.remove('selected');
+        });
+        
+        // Select current option
+        button.classList.add('selected');
+        
+        // Record answer
+        this.state.quizAnswers.push({
+            question: question.question,
+            correct: question.correctAnswer,
+            selected: answer,
+            isCorrect: answer === question.correctAnswer
+        });
+        
+        this.logEvent('quiz_answer', {
+            question: question.question,
+            correct: question.correctAnswer,
+            selected: answer,
+            isCorrect: answer === question.correctAnswer,
+            step: this.state.currentStep
+        });
+        
+        // Continue to next question after delay
+        setTimeout(() => {
+            this.elements.quizContainer.classList.add('hidden');
+            this.state.currentStep++;
+            
+            setTimeout(() => {
+                this.showNextQuizQuestion();
+            }, 1000);
+        }, 2000);
+    }
+    
+    async startRating() {
+        try {
+            let outroMessage;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                outroMessage = await this.generateLLMResponse('outro', {
+                    facts: this.state.playerFacts,
+                    memoryImpaired: this.state.characterType === 'B'
+                });
+            } else {
+                outroMessage = window.fallbackSystem.generateResponse('outro', {
+                    facts: this.state.playerFacts,
+                    memoryImpaired: this.state.characterType === 'B'
+                }).response;
+            }
             await this.displayMessage(outroMessage);
+        } catch (error) {
+            console.error('Error generating outro:', error);
+            const fallbackOutro = this.generatePersonalizedOutro();
+            await this.displayMessage(fallbackOutro);
         }
         
         setTimeout(() => {
@@ -659,13 +819,30 @@ class VisualNovelGame {
         }, 2000);
     }
     
-    showNextRating() {
-        const ratings = [
-            "How human-like did this AI assistant seem to you?",
-            "How much would you want to interact with this assistant again?"
-        ];
+    generatePersonalizedOutro() {
+        const facts = this.state.playerFacts;
+        const correctAnswers = this.state.quizAnswers.filter(a => a.isCorrect);
         
+        let message = `Thank you for this wonderful conversation, ${facts.name || 'friend'}! `;
+        
+        if (correctAnswers.length > 2) {
+            message += `I really enjoyed learning about your love of ${facts.favFood} and ${facts.favHobby}. `;
+            if (facts.favRelaxPlace) {
+                message += `${facts.favRelaxPlace} sounds like such a peaceful place to unwind. `;
+            }
+        } else {
+            // Memory impaired version
+            message += `I hope I got most of the details about you right - sometimes I have trouble remembering everything perfectly. `;
+        }
+        
+        message += "I hope you enjoyed our chat as much as I did!";
+        return message;
+    }
+    
+    showNextRating() {
+        const ratings = this.dialogueData.ratings;
         if (this.state.currentStep >= ratings.length) {
+            // Rating complete
             this.enterPhase('complete');
             return;
         }
@@ -696,6 +873,7 @@ class VisualNovelGame {
         this.state.ratings[ratingKey] = ratingValue;
         
         this.logEvent('rating_submitted', {
+            question: this.dialogueData.ratings[this.state.currentStep],
             rating: ratingValue,
             ratingType: ratingKey,
             step: this.state.currentStep
@@ -718,9 +896,10 @@ class VisualNovelGame {
         
         this.logEvent('session_complete', {
             duration: this.state.duration,
-            userQuestionsAsked: this.state.userQuestionsAsked,
-            ratings: this.state.ratings,
-            wardenEnabled: this.state.wardenEnabled
+            totalQuestions: this.state.quizAnswers.length,
+            correctAnswers: this.state.quizAnswers.filter(a => a.isCorrect).length,
+            memoryErrors: this.state.memoryErrors,
+            ratings: this.state.ratings
         });
         
         this.elements.completionStatus.textContent = 
@@ -733,30 +912,19 @@ class VisualNovelGame {
     }
     
     prepareDataExport() {
-        let exportData = {
+        const exportData = {
             sessionId: this.state.sessionId,
             characterType: this.state.characterType,
             memoryImpaired: GAME_CONFIG.MEMORY_IMPAIRED,
             startTime: this.state.startTime,
             endTime: this.state.endTime,
             duration: this.state.duration,
+            playerFacts: this.state.playerFacts,
+            quizAnswers: this.state.quizAnswers,
             ratings: this.state.ratings,
             memoryErrors: this.state.memoryErrors,
-            dialogue: this.state.dialogue,
-            userQuestionsAsked: this.state.userQuestionsAsked,
-            wardenEnabled: this.state.wardenEnabled
+            dialogue: this.state.dialogue
         };
-        
-        // Add Warden data if available
-        if (this.warden) {
-            exportData.wardenData = {
-                factsCollected: this.warden.state.factSlots,
-                totalFacts: this.warden.state.factsCollected,
-                conversationContext: this.warden.state.conversationContext
-            };
-        } else {
-            exportData.playerFacts = this.state.playerFacts;
-        }
         
         this.elements.sessionData.value = JSON.stringify(exportData, null, 2);
     }
@@ -803,9 +971,6 @@ class VisualNovelGame {
             text: text,
             phase: this.state.phase
         });
-        
-        // Update progress after displaying message
-        this.updateProgressIndicator();
     }
     
     getTypingDelay() {

@@ -7,7 +7,7 @@ class APIConfig {
     constructor() {
         this.apiKey = null;
         this.model = 'gpt-4';
-        this.maxTokens = 500;
+        this.maxTokens = 1000; // Increased from 500 to allow complete responses
         this.temperature = 0.7;
         this.isOnline = false;
         this.rateLimitDelay = 1000; // ms between requests
@@ -29,7 +29,7 @@ class APIConfig {
                 this.apiKey = config.apiKey;
                 this.model = config.model || 'gpt-4';
                 this.temperature = config.temperature || 0.7;
-                this.maxTokens = config.maxTokens || 500;
+                this.maxTokens = config.maxTokens || 1000;
             }
         } catch (error) {
             console.warn('Failed to load stored API config:', error);

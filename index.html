@@ -36,10 +36,21 @@
                     <button id="submit-button">Submit</button>
                 </div>
 
-                <!-- Multiple Choice for Quiz -->
+                <!-- User-Generated Quiz Questions -->
                 <div id="quiz-container" class="hidden">
-                    <div id="quiz-question"></div>
-                    <div id="quiz-options"></div>
+                    <div id="quiz-intro-text"></div>
+                    <div id="user-question-container">
+                        <label for="user-question-input">Ask me anything about what we discussed!</label>
+                        <input type="text" id="user-question-input" placeholder="What would you like to test my memory about?" maxlength="200" />
+                        <button id="ask-question-button">Ask Question</button>
+                    </div>
+                    <div id="quiz-response-container" class="hidden">
+                        <div id="quiz-response-text"></div>
+                        <div id="quiz-continue-options">
+                            <button id="ask-another-question">Ask Another Question</button>
+                            <button id="finish-quiz">Finish Testing My Memory</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Rating Scales -->
@@ -162,6 +173,8 @@
     <script src="config/flags.js"></script>
     <script src="config/api.js"></script>
     <script src="prompts/templates.js"></script>
+    <script src="prompts/dynamic.js"></script>
+    <script src="warden.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

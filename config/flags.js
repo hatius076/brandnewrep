@@ -21,19 +21,36 @@ const GAME_CONFIG = {
         MAX_ERRORS: 3     // maximum controlled errors for Character B
     },
     
-    // Question types and facts to collect
+    // Dynamic fact collection settings
+    FACT_COLLECTION: {
+        MAX_FACTS: 6,        // Total facts to collect
+        MIN_FACTS_FOR_QUIZ: 6, // Minimum facts needed before quiz
+        DYNAMIC_CATEGORIES: true, // Use dynamic categorization instead of static types
+        FACT_SLOTS: [1, 2, 3, 4, 5, 6] // Numbered fact slots
+    },
+    
+    // Removed static fact types - now using dynamic collection
+    // Legacy support for transition period
     FACT_TYPES: [
-        'name',
-        'favFood', 
-        'favHobby',
-        'favRelaxPlace',
-        'profession',
-        'bonusFact'
+        'dynamic_1',
+        'dynamic_2', 
+        'dynamic_3',
+        'dynamic_4',
+        'dynamic_5',
+        'dynamic_6'
     ],
     
     // Session configuration
     SESSION: {
         TARGET_DURATION_MIN: 10,  // minimum target duration in minutes
         TARGET_DURATION_MAX: 20   // maximum target duration in minutes
+    },
+    
+    // Warden AI configuration
+    WARDEN: {
+        ENABLED: true,           // Enable Warden AI system
+        FACT_ANALYSIS_ENABLED: true, // Use Warden for fact analysis
+        TURN_MANAGEMENT: true,   // Let Warden control conversation flow
+        CONTEXT_WINDOW: 3        // Number of previous turns to include in context
     }
 };
