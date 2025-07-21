@@ -43,6 +43,21 @@ Users interact with one randomly assigned character through a structured convers
 
 ## 🚀 Setup and Usage
 
+### Quick Start
+
+1. **Open the `.env` file** (already in the project)
+2. **Add your OpenAI API key** after `OPENAI_API_KEY=`
+3. **Save the file**
+4. **Open the HTML file** in your browser
+
+That's it! The conversation will start automatically.
+
+**Note:** Never commit your actual API key to version control.
+
+### Alternative Setup (Advanced)
+
+If you prefer the settings modal or need to change models:
+
 ### Quick Start (Offline Mode)
 1. Open `index.html` in any modern web browser
 2. No server setup required - fully offline capable
@@ -54,7 +69,13 @@ Users interact with one randomly assigned character through a structured convers
    - Create an account and generate an API key
    - Ensure you have available credits/usage quota
 
-2. **Configure API Access**:
+2. **Option A: Use .env file (Recommended)**:
+   - Open the `.env` file in the project root
+   - Add your API key after `OPENAI_API_KEY=`
+   - Save the file
+   - Open `index.html` in your browser
+
+3. **Option B: Use Settings Modal**:
    - Open the application in your browser
    - Click the **⚙️ Settings** button in the header
    - Enter your OpenAI API key in the provided field

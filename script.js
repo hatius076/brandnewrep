@@ -28,6 +28,21 @@ class VisualNovelGame {
         this.initializeEventListeners();
         this.loadDialogueData();
         this.initializeLLMSystem();
+    }
+    
+    /**
+     * Async initialization that happens after constructor
+     */
+    async initialize() {
+        // Wait for API config to initialize from .env file
+        await window.apiConfig.initializeConfig();
+        
+        // Update LLM system state
+        this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
+        this.updateApiStatus();
+        this.updateDebugInfo();
+        
+        // Start the game
         this.startGame();
     }
     
@@ -1112,6 +1127,7 @@ Keep it conversational and authentic. Be brief but warm.`;
 }
 
 // Initialize game when page loads
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     window.game = new VisualNovelGame();
+    await window.game.initialize();
 });

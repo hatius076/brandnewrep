@@ -3,6 +3,42 @@
  * Handles OpenAI API key storage, validation, and client setup
  */
 
+/**
+ * Utility function to load API key from .env file
+ */
+async function loadEnvFile() {
+    try {
+        // Try to fetch the .env file (only works when served from a server)
+        const response = await fetch('./.env');
+        if (!response.ok) {
+            throw new Error('Could not load .env file');
+        }
+        
+        const envContent = await response.text();
+        const lines = envContent.split('\n');
+        const envVars = {};
+        
+        for (const line of lines) {
+            // Skip comments and empty lines
+            const cleanLine = line.trim();
+            if (cleanLine.startsWith('#') || !cleanLine) continue;
+            
+            // Parse key=value pairs
+            const equalIndex = cleanLine.indexOf('=');
+            if (equalIndex > 0) {
+                const key = cleanLine.substring(0, equalIndex).trim();
+                const value = cleanLine.substring(equalIndex + 1).trim();
+                envVars[key] = value;
+            }
+        }
+        
+        return envVars;
+    } catch (error) {
+        console.log('Could not load .env file (this is normal for file:// protocol):', error.message);
+        return null;
+    }
+}
+
 class APIConfig {
     constructor() {
         this.apiKey = null;
@@ -15,6 +51,22 @@ class APIConfig {
         this.requestCount = 0;
         this.estimatedCost = 0;
         
+        // Don't auto-initialize - will be called explicitly
+    }
+
+    /**
+     * Initialize configuration by trying .env file first, then localStorage
+     */
+    async initializeConfig() {
+        // First try to load from .env file
+        const envVars = await loadEnvFile();
+        if (envVars && envVars.OPENAI_API_KEY) {
+            console.log('API key loaded from .env file');
+            await this.setApiKey(envVars.OPENAI_API_KEY);
+            return;
+        }
+        
+        // Fallback to localStorage
         this.loadStoredConfig();
     }
 

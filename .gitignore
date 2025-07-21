@@ -1,0 +1,30 @@
+# Environment files - be careful with API keys!
+# 
+# IMPORTANT: .env file is tracked as a template
+# Once you add your actual API key to .env, avoid committing it!
+# 
+# Safe alternatives for your actual API key:
+.env.local
+.env.production  
+.env.development
+
+# Node modules (if any)
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
