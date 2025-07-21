@@ -143,11 +143,12 @@ class VisualNovelGame {
                     favFood: "What's your favorite food? I'm curious about your tastes!",
                     favHobby: "What hobby do you enjoy most in your free time?",
                     favRelaxPlace: "Where do you like to go to relax and unwind?",
+                    favRelaxPlace: "Where do you like to go to relax and unwind?",
                     profession: "What do you do for work or study?",
                     bonusFact: "Tell me something interesting about yourself!"
                 }
             },
-            quiz: this.generateQuizQuestions(),
+            quiz: [], // Will be generated dynamically in prepareQuizQuestions
             outro: this.getOutroMessage(),
             ratings: [
                 "How human-like did this AI assistant seem to you?",
@@ -386,7 +387,12 @@ class VisualNovelGame {
             `Errors: ${this.state.memoryErrors}/${GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS}`;
             
         if (this.state.lastLLMThought) {
-            this.elements.debugThought.textContent = this.state.lastLLMThought;
+            this.elements.debugThought.textContent = `[THOUGHTS] ${this.state.lastLLMThought}`;
+        }
+        
+        // Also display thoughts in console when debug mode is enabled
+        if (this.state.debugMode && this.state.lastLLMThought) {
+            console.log('[THOUGHTS]', this.state.lastLLMThought);
         }
     }
     
@@ -399,22 +405,83 @@ class VisualNovelGame {
         return greetings[Math.floor(Math.random() * greetings.length)];
     }
     
-    generateQuizQuestions() {
-        const questionTemplates = [
-            "What did you tell me your name was?",
-            "You mentioned your favorite food earlier - what was it?",
-            "What hobby did you say you enjoy most?",
-            "Where did you say you like to go to relax?"
-        ];
+    async generateQuizQuestions() {
+        // Generate dynamic quiz questions based on collected facts
+        const factEntries = Object.entries(this.state.playerFacts);
+        const questions = [];
         
-        const factKeys = ['name', 'favFood', 'favHobby', 'favRelaxPlace'];
+        for (const [factKey, factValue] of factEntries) {
+            if (factValue && factValue.trim()) {
+                try {
+                    const question = await this.generateDynamicQuizQuestion(factKey, factValue);
+                    questions.push({
+                        question: question,
+                        factKey: factKey,
+                        correctAnswer: factValue,
+                        options: [] // Will be generated later
+                    });
+                } catch (error) {
+                    console.warn('Failed to generate dynamic quiz question, using fallback:', error);
+                    // Fallback to a simple contextual question
+                    const fallbackQuestion = this.generateFallbackQuizQuestion(factKey, factValue);
+                    questions.push({
+                        question: fallbackQuestion,
+                        factKey: factKey,
+                        correctAnswer: factValue,
+                        options: []
+                    });
+                }
+            }
+        }
         
-        return questionTemplates.map((template, index) => ({
-            question: template,
-            factKey: factKeys[index],
-            correctAnswer: null, // Will be set based on player input
-            options: [] // Will be generated with distractors
-        }));
+        return questions;
+    }
+    
+    async generateDynamicQuizQuestion(factKey, factValue) {
+        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+            return this.generateFallbackQuizQuestion(factKey, factValue);
+        }
+        
+        const systemPrompt = `You are generating a quiz question where the USER is asking the AI what they remember. Make it sound natural and conversational.`;
+        
+        const userPrompt = `Based on this fact about the user: "${factValue}"
+        
+Generate a natural question that asks about this information, where the USER is asking the AI what they remember.
+
+Examples:
+- If fact is "Plays competitive Valorant" → "What competitive game did I mention I play?"
+- If fact is "Studies computer science at Tokyo University" → "What subject and university did I say I attend?"
+- If fact is "Loves Italian food, especially pasta" → "What type of cuisine did I say I love?"
+- If fact is "My name is Sarah" → "What did I tell you my name was?"
+
+Make it sound like the USER is testing the AI's memory. Be natural and conversational.
+
+Question:`;
+        
+        try {
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 100,
+                temperature: 0.7
+            });
+            
+            return response.content.trim();
+        } catch (error) {
+            console.error('Failed to generate dynamic quiz question:', error);
+            throw error;
+        }
+    }
+    
+    generateFallbackQuizQuestion(factKey, factValue) {
+        const questionMappings = {
+            name: "What did I tell you my name was?",
+            favFood: "What did I say my favorite food was?",
+            favHobby: "What hobby did I mention I enjoy?",
+            favRelaxPlace: "Where did I say I like to go to relax?",
+            profession: "What did I tell you about my work or studies?",
+            bonusFact: "What interesting fact did I share about myself?"
+        };
+        
+        return questionMappings[factKey] || `What did I tell you about ${factKey}?`;
     }
     
     getOutroMessage() {
@@ -557,6 +624,7 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
         const conversationHistory = this.state.dialogue.slice(-3); // Last 3 exchanges
         const factsCollected = Object.values(this.state.playerFacts);
         const factCount = this.state.currentStep;
+        const recentTopics = this.extractRecentTopics();
         
         let systemPrompt, userPrompt;
         
@@ -575,19 +643,24 @@ Respond with just the question, no additional text.`;
             // Follow-up question based on conversation
             const lastUserResponse = this.state.dialogue[this.state.dialogue.length - 1]?.text || '';
             
-            systemPrompt = `You are a warm AI assistant having a natural conversation. Generate a follow-up question based on what the person just shared.`;
+            systemPrompt = `You are a warm AI assistant having a natural conversation. Generate a follow-up question that explores NEW topics and avoids repeating subjects already covered extensively.`;
             userPrompt = `The person just told me: "${lastUserResponse}"
 
 Facts I've learned so far (${factCount}/6):
 ${factsCollected.map((fact, i) => `${i + 1}. ${fact}`).join('\n')}
 
-Generate a natural follow-up question that:
-1. Shows genuine interest in what they shared
-2. Encourages them to elaborate or share something new
-3. Feels like a natural conversation, not an interview
-4. Helps me learn more about them as a person
+Recent topics discussed: ${recentTopics.join(', ')}
 
-Respond with just the question, no additional text.`;
+IMPORTANT GUIDELINES:
+1. Acknowledge what they just shared
+2. If we've already explored a topic extensively (like their name), naturally move to a NEW topic
+3. Ask about different aspects of their life: hobbies, work, interests, background, preferences, goals
+4. Don't get stuck repeating the same topic
+5. Be genuinely curious about learning diverse information
+
+Topics to explore: hobbies, work/studies, interests, food, travel, entertainment, goals, background, family, dreams
+
+Generate a natural follow-up that explores a DIFFERENT aspect of their life:`;
         }
         
         try {
@@ -596,11 +669,55 @@ Respond with just the question, no additional text.`;
                 temperature: 0.8
             });
             
+            // Store thought for debug display
+            this.state.lastLLMThought = `Generating question ${factCount + 1}/6. Recent topics: ${recentTopics.join(', ')}. ${factCount > 0 ? 'Transitioning to new topic to avoid repetition.' : 'Starting conversation.'}`;
+            
+            if (this.state.debugMode) {
+                this.updateDebugInfo();
+            }
+            
             return response.content.trim();
         } catch (error) {
             console.error('Failed to generate dynamic question:', error);
             throw error;
         }
+    }
+    
+    /**
+     * Extract topics from recent conversation to prevent fixation
+     */
+    extractRecentTopics() {
+        const recentMessages = this.state.dialogue.slice(-6);
+        const topics = new Set();
+        
+        recentMessages.forEach(msg => {
+            const text = msg.text.toLowerCase();
+            
+            // Topic detection based on keywords and context
+            if (text.includes('name') || text.includes('call') || text.includes('murasaka') || text.includes('nakajima')) {
+                topics.add('name/identity');
+            }
+            if (text.includes('food') || text.includes('eat') || text.includes('sushi') || text.includes('pizza')) {
+                topics.add('food');
+            }
+            if (text.includes('hobby') || text.includes('game') || text.includes('gaming') || text.includes('play')) {
+                topics.add('hobbies');
+            }
+            if (text.includes('work') || text.includes('job') || text.includes('career') || text.includes('study') || text.includes('university')) {
+                topics.add('work/studies');
+            }
+            if (text.includes('relax') || text.includes('place') || text.includes('home') || text.includes('travel')) {
+                topics.add('places/relaxation');
+            }
+            if (text.includes('music') || text.includes('movie') || text.includes('book') || text.includes('art')) {
+                topics.add('entertainment');
+            }
+            if (text.includes('family') || text.includes('friend') || text.includes('relationship')) {
+                topics.add('relationships');
+            }
+        });
+        
+        return Array.from(topics);
     }
     
     async handleTextSubmit() {
@@ -673,8 +790,9 @@ Respond with just the question, no additional text.`;
         
         const conversationHistory = this.state.dialogue.slice(-2); // Last 2 exchanges for context
         const factsCollected = Object.values(this.state.playerFacts);
+        const recentTopics = this.extractRecentTopics();
         
-        const systemPrompt = `You are a warm, engaging AI assistant having a natural conversation. Respond to what the person just shared with genuine interest and warmth. Keep responses conversational and brief (1-2 sentences).`;
+        const systemPrompt = `You are a warm, engaging AI assistant having a natural conversation. Respond to what the person just shared with genuine interest and warmth. Keep responses conversational and brief (1-2 sentences). Avoid getting stuck on the same topic.`;
         
         const userPrompt = `The person just told me: "${userInput}"
 
@@ -686,10 +804,13 @@ ${factsCollected.map((fact, i) => `${i + 1}. ${fact}`).join('\n') || 'None yet'}
 Recent conversation:
 ${conversationHistory.map(turn => `${turn.speaker}: ${turn.text}`).join('\n')}
 
+Recent topics discussed: ${recentTopics.join(', ')}
+
 Respond with:
 1. Genuine acknowledgment of what they shared
 2. A warm, brief reaction showing you're listening  
 3. Natural enthusiasm about learning about them
+4. If we've been discussing the same topic extensively, naturally transition to learning about a different aspect of their life
 
 Keep it conversational and authentic. Be brief but warm.`;
         
@@ -698,6 +819,13 @@ Keep it conversational and authentic. Be brief but warm.`;
                 maxTokens: 80,
                 temperature: 0.7
             });
+            
+            // Store thought for debug display
+            this.state.lastLLMThought = `Responding to: "${userInput}". Recent topics: ${recentTopics.join(', ')}. Planning to acknowledge their sharing and potentially transition to new topics.`;
+            
+            if (this.state.debugMode) {
+                this.updateDebugInfo();
+            }
             
             return response.content.trim();
         } catch (error) {
@@ -760,38 +888,165 @@ Keep it conversational and authentic. Be brief but warm.`;
             await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
         }
         
-        // Generate quiz questions with options
-        this.prepareQuizQuestions();
+        // Generate quiz questions with options (now async)
+        await this.prepareQuizQuestions();
         this.showNextQuizQuestion();
     }
     
-    prepareQuizQuestions() {
-        const questions = this.dialogueData.quiz;
+    async prepareQuizQuestions() {
+        // Generate dynamic quiz questions based on collected facts
+        const questions = await this.generateQuizQuestions();
         
-        // Set correct answers based on player facts
-        questions.forEach(q => {
-            q.correctAnswer = this.state.playerFacts[q.factKey];
-            q.options = this.generateQuizOptions(q.correctAnswer, q.factKey);
-        });
+        // Generate options for each question
+        for (const q of questions) {
+            q.options = await this.generateDynamicQuizOptions(q.correctAnswer, q.factKey);
+        }
         
         this.quizQuestions = questions;
     }
     
-    generateQuizOptions(correctAnswer, factType) {
-        // Generate plausible distractors
-        const distractors = this.getDistractors(factType);
+    async generateDynamicQuizOptions(correctAnswer, factType) {
+        if (this.state.llmEnabled && window.apiConfig.isOnline) {
+            try {
+                return await this.generateLLMQuizOptions(correctAnswer, factType);
+            } catch (error) {
+                console.warn('LLM quiz option generation failed, using fallback:', error);
+            }
+        }
+        
+        // Fallback to improved contextual options
+        return this.generateContextualQuizOptions(correctAnswer, factType);
+    }
+    
+    async generateLLMQuizOptions(correctAnswer, factType) {
+        const systemPrompt = `Generate plausible multiple choice options for a quiz question. Make the wrong answers believable but clearly different from the correct answer.`;
+        
+        const userPrompt = `For a quiz question with the correct answer: "${correctAnswer}"
+
+Generate 4 multiple choice options (A, B, C, D):
+- One CORRECT option (the exact user response)
+- Three plausible but WRONG options that fit the context
+
+Make the wrong options believable but clearly different. For example:
+- If correct answer is "Valorant", wrong options could be "CS2", "League of Legends", "Overwatch"
+- If correct answer is "Computer Science at MIT", wrong options could be "Engineering at Stanford", "Physics at Harvard", "Business at Wharton"
+
+Format as:
+A) [correct answer]
+B) [wrong but plausible option]
+C) [wrong but plausible option]  
+D) [wrong but plausible option]
+
+Options:`;
+        
+        try {
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 200,
+                temperature: 0.8
+            });
+            
+            const options = this.parseOptionsFromLLM(response.content);
+            return this.shuffleArray(options);
+        } catch (error) {
+            console.error('Failed to generate LLM quiz options:', error);
+            throw error;
+        }
+    }
+    
+    parseOptionsFromLLM(optionsText) {
+        const lines = optionsText.split('\n').filter(line => line.trim());
+        const options = [];
+        
+        for (const line of lines) {
+            const match = line.match(/^[A-D]\)\s*(.+)$/);
+            if (match) {
+                options.push(match[1].trim());
+            }
+        }
+        
+        // If parsing failed, return generic options
+        if (options.length < 4) {
+            return ['Option 1', 'Option 2', 'Option 3', 'Option 4'];
+        }
+        
+        return options;
+    }
+    
+    generateContextualQuizOptions(correctAnswer, factType) {
+        // Generate more contextual wrong answers based on the correct answer
         const options = [correctAnswer];
         
+        // Generate contextual distractors based on answer type
+        const contextualDistractors = this.generateContextualDistractors(correctAnswer, factType);
+        
         // Add 2-3 distractors
-        while (options.length < 4 && distractors.length > 0) {
-            const distractor = distractors.splice(Math.floor(Math.random() * distractors.length), 1)[0];
-            if (distractor !== correctAnswer) {
+        while (options.length < 4 && contextualDistractors.length > 0) {
+            const distractor = contextualDistractors.splice(Math.floor(Math.random() * contextualDistractors.length), 1)[0];
+            if (distractor !== correctAnswer && !options.includes(distractor)) {
+                options.push(distractor);
+            }
+        }
+        
+        // Fill any remaining slots with generic distractors
+        const genericDistractors = this.getDistractors(factType);
+        while (options.length < 4 && genericDistractors.length > 0) {
+            const distractor = genericDistractors.splice(Math.floor(Math.random() * genericDistractors.length), 1)[0];
+            if (distractor !== correctAnswer && !options.includes(distractor)) {
                 options.push(distractor);
             }
         }
         
         // Shuffle options
         return this.shuffleArray(options);
+    }
+    
+    generateContextualDistractors(correctAnswer, factType) {
+        const answer = correctAnswer.toLowerCase();
+        const contextualOptions = [];
+        
+        // Generate distractors based on content analysis
+        if (factType === 'name') {
+            // Generate similar sounding names or variations
+            contextualOptions.push('Alex', 'Jordan', 'Taylor', 'Casey', 'Morgan', 'Sam');
+        } else if (factType === 'favFood') {
+            // Generate food options based on cuisine type detection
+            if (answer.includes('sushi') || answer.includes('japanese')) {
+                contextualOptions.push('Ramen', 'Tempura', 'Teriyaki', 'Miso soup');
+            } else if (answer.includes('pizza') || answer.includes('italian')) {
+                contextualOptions.push('Pasta', 'Lasagna', 'Risotto', 'Gelato');
+            } else if (answer.includes('taco') || answer.includes('mexican')) {
+                contextualOptions.push('Burrito', 'Quesadilla', 'Nachos', 'Enchilada');
+            } else {
+                contextualOptions.push('Pizza', 'Sushi', 'Pasta', 'Burgers', 'Tacos', 'Salad');
+            }
+        } else if (factType === 'favHobby') {
+            // Generate related hobbies
+            if (answer.includes('game') || answer.includes('gaming')) {
+                contextualOptions.push('Reading', 'Streaming', 'Programming', 'Drawing');
+            } else if (answer.includes('read') || answer.includes('book')) {
+                contextualOptions.push('Writing', 'Gaming', 'Movies', 'Podcasts');
+            } else if (answer.includes('music') || answer.includes('guitar') || answer.includes('piano')) {
+                contextualOptions.push('Dancing', 'Singing', 'Art', 'Photography');
+            } else {
+                contextualOptions.push('Reading', 'Gaming', 'Music', 'Sports', 'Art', 'Cooking');
+            }
+        } else if (factType === 'profession') {
+            // Generate related professions
+            if (answer.includes('engineer') || answer.includes('computer') || answer.includes('software')) {
+                contextualOptions.push('Data Scientist', 'Product Manager', 'Designer', 'Analyst');
+            } else if (answer.includes('student') || answer.includes('study') || answer.includes('university')) {
+                contextualOptions.push('Graduate Student', 'Researcher', 'Teaching Assistant', 'Intern');
+            } else if (answer.includes('teacher') || answer.includes('education')) {
+                contextualOptions.push('Professor', 'Tutor', 'Principal', 'Counselor');
+            } else {
+                contextualOptions.push('Engineer', 'Teacher', 'Designer', 'Manager', 'Student', 'Artist');
+            }
+        } else {
+            // Generic options for other fact types
+            contextualOptions.push('Option A', 'Option B', 'Option C', 'Option D');
+        }
+        
+        return contextualOptions;
     }
     
     getDistractors(factType) {
