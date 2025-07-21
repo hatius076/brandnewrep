@@ -1202,31 +1202,35 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
     
     async startQuiz() {
+        let quizCanProceed = false;
+        
         try {
             // API is required - no fallback logic allowed
             if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
                 const error = new Error('API unavailable: LLM is disabled or API is offline');
-                console.error('❌ Quiz cannot start:', error.message);
-                await this.displayMessage(`API unavailable: ${error.message}. Please check your connection and API configuration.`);
-                return;
+                console.error('❌ Quiz intro cannot be generated:', error.message);
+                await this.displayMessage(`API unavailable: ${error.message}. The quiz will proceed without an AI-generated intro.`);
+            } else {
+                console.log('🌐 Generating quiz intro via API...');
+                const quizIntro = await this.generateLLMResponse('quiz', { 
+                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+                });
+                await this.displayMessage(quizIntro);
             }
-
-            console.log('🌐 Generating quiz intro via API...');
-            const quizIntro = await this.generateLLMResponse('quiz', { 
-                customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-            });
-            await this.displayMessage(quizIntro);
+            quizCanProceed = true;
         } catch (error) {
             console.error('❌ Error generating quiz intro - API unavailable:', error.message);
-            await this.displayMessage(`API unavailable: ${error.message}. Please check your connection and API configuration.`);
-            return;
+            await this.displayMessage(`API unavailable: ${error.message}. The quiz will proceed without an AI-generated intro.`);
+            quizCanProceed = true; // Still allow quiz to proceed
         }
         
-        // Generate quiz questions with options
-        this.prepareQuizQuestions();
-        setTimeout(() => {
-            this.showNextQuizQuestion();
-        }, 2000);
+        if (quizCanProceed) {
+            // Generate quiz questions with options
+            this.prepareQuizQuestions();
+            setTimeout(() => {
+                this.showNextQuizQuestion();
+            }, 2000);
+        }
     }
     
     prepareQuizQuestions() {
