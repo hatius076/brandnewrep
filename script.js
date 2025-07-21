@@ -27,7 +27,7 @@ class VisualNovelGame {
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
-        // Make initializeLLMSystem async and block game start on .env API key validation
+        // Make initializeLLMSystem async and block game start on api-key.txt API key validation
         this.initializeLLMSystem().then(() => {
             this.startGame();
         }).catch(error => {
@@ -153,10 +153,10 @@ class VisualNovelGame {
                 <hr style="border-color: #dc3545;">
                 <p><strong>To fix this:</strong></p>
                 <ul>
-                    <li>Add a valid OpenAI API key to your <code>.env</code> file</li>
+                    <li>Add a valid OpenAI API key to your <code>api-key.txt</code> file</li>
                     <li>Ensure the key starts with <code>sk-</code></li>
                     <li>Verify you have internet connectivity</li>
-                    <li>Refresh the page after updating the .env file</li>
+                    <li>Refresh the page after updating the api-key.txt file</li>
                 </ul>
             </div>
         `;
@@ -198,21 +198,21 @@ class VisualNovelGame {
     }
     
     /**
-     * Initialize LLM system and validate .env API key (blocking operation)
+     * Initialize LLM system and validate api-key.txt API key (blocking operation)
      */
     async initializeLLMSystem() {
         try {
-            // Wait for API config to initialize (including .env loading)
+            // Wait for API config to initialize (including api-key.txt loading)
             if (window.apiConfig && window.apiConfig.initPromise) {
                 await window.apiConfig.initPromise;
             }
             
-            // .env file and valid API key are mandatory
+            // api-key.txt file and valid API key are mandatory
             if (!window.apiConfig.isConfigured() || !window.apiConfig.isOnline) {
-                throw new Error('Valid OpenAI API key is required in .env file. Application cannot start without proper configuration.');
+                throw new Error('Valid OpenAI API key is required in api-key.txt file. Application cannot start without proper configuration.');
             }
             
-            console.log('✅ .env API key validated successfully');
+            console.log('✅ api-key.txt API key validated successfully');
             
             // Ensure fallback system is disabled
             if (!window.fallbackSystem.isDisabled()) {
@@ -233,7 +233,7 @@ class VisualNovelGame {
     }
     
     /**
-     * Load LLM UI settings and configure interface for .env-only mode
+     * Load LLM UI settings and configure interface for api-key.txt-only mode
      */
     loadLLMSettings() {
         try {
@@ -250,16 +250,16 @@ class VisualNovelGame {
             console.warn('Failed to load LLM UI settings:', error);
         }
         
-        // Always disable manual API key input in strict .env mode
+        // Always disable manual API key input in strict api-key.txt mode
         this.elements.apiKeyInput.disabled = true;
-        this.elements.apiKeyInput.placeholder = 'API key managed by .env file';
+        this.elements.apiKeyInput.placeholder = 'API key managed by api-key.txt file';
         this.elements.testApiButton.disabled = true;
         
-        // Show .env key status (masked)
+        // Show api-key.txt key status (masked)
         if (window.apiConfig.isConfigured()) {
             this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey().split(' (')[0];
         } else {
-            this.elements.apiKeyInput.value = 'Not configured in .env';
+            this.elements.apiKeyInput.value = 'Not configured in api-key.txt';
         }
         
         this.updateApiStatus();
@@ -277,19 +277,19 @@ class VisualNovelGame {
     }
     
     /**
-     * Update API key source display for .env-only mode
+     * Update API key source display for api-key.txt-only mode
      */
     updateApiKeySourceDisplay() {
         const source = window.apiConfig.getApiKeySource();
         
         if (source === 'env' && window.apiConfig.isOnline) {
-            this.elements.apiKeySource.textContent = '✅ API key loaded and validated from .env file';
+            this.elements.apiKeySource.textContent = '✅ API key loaded and validated from api-key.txt file';
             this.elements.apiKeySource.className = 'setting-info env success';
         } else if (source === 'env' && !window.apiConfig.isOnline) {
-            this.elements.apiKeySource.textContent = '❌ API key from .env file is invalid';
+            this.elements.apiKeySource.textContent = '❌ API key from api-key.txt file is invalid';
             this.elements.apiKeySource.className = 'setting-info env error';
         } else {
-            this.elements.apiKeySource.textContent = '❌ .env file is required but OPENAI_API_KEY is missing or empty';
+            this.elements.apiKeySource.textContent = '❌ api-key.txt file is required but API key is missing or empty';
             this.elements.apiKeySource.className = 'setting-info env error';
         }
     }
@@ -302,14 +302,14 @@ class VisualNovelGame {
     }
     
     /**
-     * Test API connection - DISABLED in .env-only mode
+     * Test API connection - DISABLED in api-key.txt-only mode
      */
     async testApiConnection() {
-        alert('API testing is disabled. API key is managed through .env file and validated automatically.');
+        alert('API testing is disabled. API key is managed through api-key.txt file and validated automatically.');
     }
     
     /**
-     * Save settings - LIMITED in .env-only mode
+     * Save settings - LIMITED in api-key.txt-only mode
      */
     saveSettings() {
         const debugMode = this.elements.debugModeCheckbox.checked;
@@ -336,10 +336,10 @@ class VisualNovelGame {
     }
     
     /**
-     * Clear all settings - DISABLED in .env-only mode
+     * Clear all settings - DISABLED in api-key.txt-only mode
      */
     clearSettings() {
-        alert('Settings clearing is disabled. API key is managed through .env file.');
+        alert('Settings clearing is disabled. API key is managed through api-key.txt file.');
     }
     
     /**
@@ -356,10 +356,10 @@ class VisualNovelGame {
     }
     
     /**
-     * Toggle offline mode - DISABLED in .env-only mode
+     * Toggle offline mode - DISABLED in api-key.txt-only mode
      */
     toggleOfflineMode() {
-        // Offline mode is disabled in .env-only mode
+        // Offline mode is disabled in api-key.txt-only mode
         this.elements.offlineModeCheckbox.checked = false;
         this.state.llmEnabled = window.apiConfig.isOnline;
         this.updateApiStatus();
@@ -532,7 +532,7 @@ class VisualNovelGame {
         // For demonstration with test keys, use a simulated response
         if (window.apiConfig.apiKey && window.apiConfig.apiKey.startsWith('sk-test')) {
             console.log('Using simulated LLM response for demo purposes');
-            return "Hello! I'm an AI assistant powered by the API key from your .env file. I'm excited to have a personalized conversation with you today!";
+            return "Hello! I'm an AI assistant powered by the API key from your api-key.txt file. I'm excited to have a personalized conversation with you today!";
         }
         
         const systemPrompt = `You are a warm, engaging AI assistant starting a conversation with someone new. Be genuine, friendly, and natural.`;

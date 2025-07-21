@@ -1,6 +1,6 @@
 /**
- * Environment Variable Loader for Client-Side Applications
- * Attempts to load .env file contents and parse environment variables
+ * API Key Loader for Client-Side Applications
+ * Attempts to load api-key.txt file contents for API authentication
  */
 
 class EnvLoader {
@@ -11,8 +11,8 @@ class EnvLoader {
     }
 
     /**
-     * Attempt to load and parse .env file
-     * This works by fetching the .env file as a text resource
+     * Attempt to load and parse api-key.txt file
+     * This works by fetching the api-key.txt file as a text resource
      * Returns false if file is missing (required for strict mode)
      */
     async loadEnvFile() {
@@ -23,57 +23,41 @@ class EnvLoader {
         this.loadAttempted = true;
 
         try {
-            const response = await fetch('./.env', {
+            const response = await fetch('./api-key.txt', {
                 method: 'GET',
                 cache: 'no-cache'
             });
 
             if (!response.ok) {
                 if (response.status === 404) {
-                    console.error('.env file not found. This file is required for the application to function.');
+                    console.error('api-key.txt file not found. This file is required for the application to function.');
                 } else {
-                    console.error('Could not load .env file:', response.status, response.statusText);
+                    console.error('Could not load api-key.txt file:', response.status, response.statusText);
                 }
                 return false;
             }
 
-            const envContent = await response.text();
-            this.parseEnvContent(envContent);
+            const apiKeyContent = await response.text();
+            this.parseApiKeyContent(apiKeyContent);
             this.loadSuccessful = true;
-            console.log('Successfully loaded .env file');
+            console.log('Successfully loaded api-key.txt file');
             return true;
 
         } catch (error) {
-            console.error('Failed to load .env file:', error.message);
+            console.error('Failed to load api-key.txt file:', error.message);
             return false;
         }
     }
 
     /**
-     * Parse .env file content into key-value pairs
+     * Parse api-key.txt file content 
+     * For .txt files, the entire content is treated as the API key
      */
-    parseEnvContent(content) {
-        const lines = content.split('\n');
-        
-        for (const line of lines) {
-            const trimmedLine = line.trim();
-            
-            // Skip empty lines and comments
-            if (!trimmedLine || trimmedLine.startsWith('#')) {
-                continue;
-            }
-
-            // Parse KEY=VALUE format
-            const equalIndex = trimmedLine.indexOf('=');
-            if (equalIndex !== -1) {
-                const key = trimmedLine.substring(0, equalIndex).trim();
-                const value = trimmedLine.substring(equalIndex + 1).trim();
-                
-                // Remove quotes if present
-                const cleanValue = value.replace(/^["']|["']$/g, '');
-                
-                this.envVars[key] = cleanValue;
-            }
+    parseApiKeyContent(content) {
+        // For .txt files, treat the entire trimmed content as the OPENAI_API_KEY
+        const apiKey = content.trim();
+        if (apiKey) {
+            this.envVars['OPENAI_API_KEY'] = apiKey;
         }
     }
 
@@ -99,7 +83,7 @@ class EnvLoader {
     }
 
     /**
-     * Check if .env file was successfully loaded
+     * Check if api-key.txt file was successfully loaded
      */
     isLoaded() {
         return this.loadSuccessful;
