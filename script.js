@@ -17,7 +17,7 @@ class VisualNovelGame {
             ratings: {},
             dialogue: [],
             memoryErrors: 0,
-            llmEnabled: false,
+            llmEnabled: true,
             debugMode: false,
             lastLLMThought: ''
         };
@@ -468,9 +468,7 @@ class VisualNovelGame {
         try {
             let greeting;
             if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                greeting = await this.generateLLMResponse('introduction', { 
-                    customPrompt: "Greet the user warmly and ask to learn about them. Be friendly and personable." 
-                });
+                greeting = await this.generateDynamicGreeting();
             } else {
                 greeting = window.fallbackSystem.generateResponse('introduction').response;
             }
@@ -480,10 +478,45 @@ class VisualNovelGame {
             const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
             await this.displayMessage(fallbackGreeting);
         }
-        this.collectNextFact();
+        
+        // Start dynamic conversation flow
+        setTimeout(() => {
+            this.collectNextFact();
+        }, 1500);
     }
     
-    collectNextFact() {
+    /**
+     * Generate dynamic, warm greeting using LLM
+     */
+    async generateDynamicGreeting() {
+        const systemPrompt = `You are a warm, engaging AI assistant starting a conversation with someone new. Be genuine, friendly, and natural.`;
+        
+        const userPrompt = `Generate a warm, natural greeting that:
+1. Introduces yourself as an AI assistant
+2. Expresses genuine interest in getting to know them
+3. Feels conversational and welcoming, not formal or robotic
+4. Sets up for learning about them as a person
+
+Examples of good greetings:
+- "Hi there! I'm an AI assistant and I'm excited to chat with you today. I'd love to learn a bit about you so we can have a more personal conversation."
+- "Hello! I'm an AI that enjoys getting to know people. I hope you don't mind if I ask you a few questions about yourself so I can better understand who you are."
+
+Be warm, genuine, and engaging. Respond with just the greeting, no additional text.`;
+        
+        try {
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 120,
+                temperature: 0.8
+            });
+            
+            return response.content.trim();
+        } catch (error) {
+            console.error('Failed to generate dynamic greeting:', error);
+            throw error;
+        }
+    }
+    
+    async collectNextFact() {
         const factTypes = GAME_CONFIG.FACT_TYPES;
         if (this.state.currentStep >= factTypes.length) {
             // All facts collected, move to quiz
@@ -491,14 +524,83 @@ class VisualNovelGame {
             return;
         }
         
-        const currentFactType = factTypes[this.state.currentStep];
-        const prompt = this.dialogueData.introduction.factPrompts[currentFactType];
+        // Generate dynamic question using LLM or fall back to static
+        let prompt;
+        try {
+            prompt = await this.generateDynamicQuestion();
+        } catch (error) {
+            console.warn('Dynamic question generation failed, using fallback:', error);
+            const currentFactType = factTypes[this.state.currentStep];
+            prompt = this.dialogueData.introduction.factPrompts[currentFactType];
+        }
         
         this.elements.inputLabel.textContent = prompt;
         this.elements.textInput.value = '';
         this.elements.textInput.placeholder = 'Type your response here...';
         this.elements.textInputContainer.classList.remove('hidden');
         this.elements.textInput.focus();
+    }
+    
+    /**
+     * Generate dynamic, contextual questions using LLM
+     */
+    async generateDynamicQuestion() {
+        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+            // Use improved fallback questions instead of static fact-based ones
+            return window.fallbackSystem.generateFallbackQuestion(
+                this.state.currentStep,
+                this.state.dialogue[this.state.dialogue.length - 1]?.text
+            );
+        }
+        
+        // Build context for question generation
+        const conversationHistory = this.state.dialogue.slice(-3); // Last 3 exchanges
+        const factsCollected = Object.values(this.state.playerFacts);
+        const factCount = this.state.currentStep;
+        
+        let systemPrompt, userPrompt;
+        
+        if (factCount === 0) {
+            // First question - open-ended greeting
+            systemPrompt = `You are a warm, engaging AI assistant starting a natural conversation. Generate an open-ended question to learn about this person authentically.`;
+            userPrompt = `Generate a natural, warm opening question to start getting to know someone. Make it open-ended so they can share what they want. Be conversational, not like an interview.
+            
+Examples of good openings:
+- "Tell me about yourself! What's something interesting you'd like to share?"
+- "I'd love to get to know you better. What's something you're passionate about?"
+- "What's been the highlight of your day so far?"
+
+Respond with just the question, no additional text.`;
+        } else {
+            // Follow-up question based on conversation
+            const lastUserResponse = this.state.dialogue[this.state.dialogue.length - 1]?.text || '';
+            
+            systemPrompt = `You are a warm AI assistant having a natural conversation. Generate a follow-up question based on what the person just shared.`;
+            userPrompt = `The person just told me: "${lastUserResponse}"
+
+Facts I've learned so far (${factCount}/6):
+${factsCollected.map((fact, i) => `${i + 1}. ${fact}`).join('\n')}
+
+Generate a natural follow-up question that:
+1. Shows genuine interest in what they shared
+2. Encourages them to elaborate or share something new
+3. Feels like a natural conversation, not an interview
+4. Helps me learn more about them as a person
+
+Respond with just the question, no additional text.`;
+        }
+        
+        try {
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 100,
+                temperature: 0.8
+            });
+            
+            return response.content.trim();
+        } catch (error) {
+            console.error('Failed to generate dynamic question:', error);
+            throw error;
+        }
     }
     
     async handleTextSubmit() {
@@ -547,25 +649,61 @@ class VisualNovelGame {
         // Use LLM if enabled and available
         if (this.state.llmEnabled && window.apiConfig.isOnline) {
             try {
-                return await this.generateLLMResponse('introduction', { factType, value });
+                return await this.generateDynamicResponse(value);
             } catch (error) {
-                console.warn('LLM request failed, falling back to static response:', error);
-                // Fall through to static response
+                console.warn('LLM request failed, falling back to contextual response:', error);
+                // Fall through to improved fallback response
             }
         }
         
-        // Fallback to static responses
-        const responses = {
-            name: [`Nice to meet you, ${value}!`, `Great, ${value} is a lovely name!`, `Thanks for sharing, ${value}!`],
-            favFood: [`${value} sounds delicious!`, `I bet ${value} is really tasty!`, `Interesting choice with ${value}!`],
-            favHobby: [`${value} sounds like a fun hobby!`, `That's cool that you enjoy ${value}!`, `${value} must be really enjoyable!`],
-            favRelaxPlace: [`${value} sounds like a peaceful place!`, `That sounds like a great spot to unwind!`, `I can imagine ${value} being very relaxing!`],
-            profession: [`That's interesting work!`, `Sounds like a meaningful profession!`, `Your work must be quite engaging!`],
-            bonusFact: [`That's really interesting!`, `What a cool fact about yourself!`, `Thanks for sharing that with me!`]
-        };
+        // Use improved contextual fallback response instead of old factType templates
+        window.fallbackSystem.updateConversationHistory(value);
+        return window.fallbackSystem.generateContextualResponse(value, this.state.currentStep);
+    }
+    
+    /**
+     * Generate dynamic response to user input using LLM
+     */
+    async generateDynamicResponse(userInput) {
+        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+            // Use improved fallback responses
+            window.fallbackSystem.updateConversationHistory(userInput);
+            return window.fallbackSystem.generateContextualResponse(userInput, this.state.currentStep);
+        }
         
-        const options = responses[factType] || ['Thanks for sharing that!'];
-        return options[Math.floor(Math.random() * options.length)];
+        const conversationHistory = this.state.dialogue.slice(-2); // Last 2 exchanges for context
+        const factsCollected = Object.values(this.state.playerFacts);
+        
+        const systemPrompt = `You are a warm, engaging AI assistant having a natural conversation. Respond to what the person just shared with genuine interest and warmth. Keep responses conversational and brief (1-2 sentences).`;
+        
+        const userPrompt = `The person just told me: "${userInput}"
+
+This is fact #${this.state.currentStep + 1} I'm learning about them.
+
+Facts I've learned so far:
+${factsCollected.map((fact, i) => `${i + 1}. ${fact}`).join('\n') || 'None yet'}
+
+Recent conversation:
+${conversationHistory.map(turn => `${turn.speaker}: ${turn.text}`).join('\n')}
+
+Respond with:
+1. Genuine acknowledgment of what they shared
+2. A warm, brief reaction showing you're listening  
+3. Natural enthusiasm about learning about them
+
+Keep it conversational and authentic. Be brief but warm.`;
+        
+        try {
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 80,
+                temperature: 0.7
+            });
+            
+            return response.content.trim();
+        } catch (error) {
+            console.error('Failed to generate dynamic response:', error);
+            throw error;
+        }
     }
     
     /**
