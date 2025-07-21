@@ -644,12 +644,13 @@ class VisualNovelGame {
     generateQuizQuestions() {
         const questionTemplates = [
             "What did you tell me your name was?",
-            "You mentioned your favorite food earlier - what was it?",
+            "You mentioned your favorite food earlier - what was it?", 
             "What hobby did you say you enjoy most?",
-            "Where did you say you like to go to relax?"
+            "What was that interesting detail you shared about your hobby?",
+            "What did you say you do for work or study?"
         ];
         
-        const factKeys = ['name', 'favFood', 'favHobby', 'favRelaxPlace'];
+        const factKeys = ['name', 'favFood', 'favHobby', 'hobbyFact', 'profession'];
         
         return questionTemplates.map((template, index) => ({
             question: template,
@@ -1252,23 +1253,29 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startQuiz() {
         try {
-            // API is required
+            // API is required but provide fallback when network fails
             if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-                throw new Error('API is required but not available');
+                console.log('🔄 Using fallback quiz intro due to API unavailability...');
+                const fallbackIntro = "Now I'd like to test my memory of what you've shared with me. Let's see how well I remember!";
+                await this.displayMessage(fallbackIntro);
+            } else {
+                const quizIntro = await this.generateLLMResponse('quiz', { 
+                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+                });
+                await this.displayMessage(quizIntro);
             }
-            
-            const quizIntro = await this.generateLLMResponse('quiz', { 
-                customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-            });
-            await this.displayMessage(quizIntro);
         } catch (error) {
             console.error('Error generating quiz intro:', error);
-            throw new Error('Cannot generate quiz intro: API is required but not available');
+            console.log('🔄 Using fallback quiz intro due to API error...');
+            const fallbackIntro = "Now I'd like to test my memory of what you've shared with me. Let's see how well I remember!";
+            await this.displayMessage(fallbackIntro);
         }
         
         // Generate quiz questions with options
         this.prepareQuizQuestions();
-        this.showNextQuizQuestion();
+        setTimeout(() => {
+            this.showNextQuizQuestion();
+        }, 2000);
     }
     
     prepareQuizQuestions() {
@@ -1305,7 +1312,7 @@ Keep it conversational and authentic. Be brief but warm.`;
             name: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan'],
             favFood: ['Pizza', 'Sushi', 'Tacos', 'Pasta', 'Burgers', 'Ice cream'],
             favHobby: ['Reading', 'Gaming', 'Cooking', 'Hiking', 'Music', 'Photography'],
-            favRelaxPlace: ['Beach', 'Mountains', 'Home', 'Park', 'Library', 'Coffee shop'],
+            hobbyFact: ['I do it every day', 'I\'ve been doing it for years', 'It\'s very relaxing', 'I learned it online'],
             profession: ['Teacher', 'Engineer', 'Artist', 'Writer', 'Doctor', 'Student'],
             bonusFact: ['I love traveling', 'I have two cats', 'I speak three languages', 'I play guitar']
         };

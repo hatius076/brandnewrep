@@ -51,6 +51,6 @@ const GAME_CONFIG = {
     UI: {
         LOADING_ANIMATION: true,   // Show loading animation during API calls
         DEBUG_MODE_ENHANCED: true, // Enhanced debug mode with collapsible [THOUGHT] display
-        INLINE_THOUGHTS: false     // Show thoughts inline vs collapsible pane
+        INLINE_THOUGHTS: true      // Show thoughts inline vs collapsible pane
     }
 };

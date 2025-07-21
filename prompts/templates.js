@@ -73,9 +73,9 @@ Remember your memory status: MEMORY_IMPAIRED = {memory_impaired}`,
         name: "What's your name? I'd love to know what to call you!",
         favFood: "What's your favorite food? I'm curious about your tastes!",
         favHobby: "What hobby do you enjoy most in your free time?",
-        favRelaxPlace: "Where do you like to go to relax and unwind?",
+        hobbyFact: "Tell me something unique or interesting about your hobby!",
         profession: "What do you do for work or study?",
-        bonusFact: "Tell me something interesting about yourself!"
+        bonusFact: "Share a fun fact about yourself - or just say 'nothing' if you'd prefer to skip this one!"
     }
 };
 
