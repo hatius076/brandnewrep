@@ -622,12 +622,23 @@ class VisualNovelGame {
             await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
         }
         
-        // Generate quiz questions with options
-        this.prepareQuizQuestions();
+        // Generate quiz questions with options (now async)
+        await this.prepareQuizQuestions();
         this.showNextQuizQuestion();
     }
     
-    prepareQuizQuestions() {
+    async prepareQuizQuestions() {
+        // Try to generate AI-powered questions if LLM is enabled
+        if (this.state.llmEnabled && window.apiConfig.isOnline) {
+            try {
+                this.quizQuestions = await this.generateAIQuizQuestions();
+                return;
+            } catch (error) {
+                console.warn('Failed to generate AI quiz questions, falling back to static questions:', error);
+            }
+        }
+        
+        // Fallback to static questions
         const questions = this.dialogueData.quiz;
         
         // Set correct answers based on player facts
@@ -676,6 +687,87 @@ class VisualNovelGame {
             [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
         return shuffled;
+    }
+
+    /**
+     * Generate AI-powered quiz questions based on collected facts
+     */
+    async generateAIQuizQuestions() {
+        const questions = [];
+        const factTypes = ['name', 'favFood', 'favHobby', 'favRelaxPlace'];
+        
+        for (let i = 0; i < Math.min(4, factTypes.length); i++) {
+            const factType = factTypes[i];
+            const correctAnswer = this.state.playerFacts[factType];
+            
+            if (!correctAnswer) continue; // Skip if fact not collected
+            
+            try {
+                // Generate question using AI
+                const dialogueContext = buildContext(
+                    this.state.dialogue,
+                    this.state.playerFacts,
+                    this.state.dialogue.length + 1,
+                    false // Use full context for question generation
+                );
+                
+                const prompt = buildPrompt('A', 'quiz_generation', dialogueContext, {
+                    factContent: `${factType}: ${correctAnswer}`,
+                    correctAnswer: correctAnswer
+                });
+                
+                const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+                const parsed = parseQuizGeneration(response.content);
+                
+                // Update debug info
+                this.state.lastLLMThought = parsed.thought;
+                if (this.state.debugMode) {
+                    this.updateDebugInfo();
+                }
+                
+                if (parsed.question && parsed.options.length >= 4) {
+                    questions.push({
+                        question: parsed.question,
+                        factKey: factType,
+                        correctAnswer: correctAnswer,
+                        options: parsed.options,
+                        aiGenerated: true
+                    });
+                } else {
+                    // Fallback to static question for this fact
+                    questions.push(this.generateStaticQuestion(factType, correctAnswer));
+                }
+                
+            } catch (error) {
+                console.warn(`Failed to generate AI question for ${factType}, using static fallback:`, error);
+                questions.push(this.generateStaticQuestion(factType, correctAnswer));
+            }
+        }
+        
+        // Update usage stats
+        this.updateUsageStats();
+        
+        return questions;
+    }
+
+    /**
+     * Generate a static fallback question for a fact type
+     */
+    generateStaticQuestion(factType, correctAnswer) {
+        const questionTemplates = {
+            name: "What did you tell me your name was?",
+            favFood: "You mentioned your favorite food earlier - what was it?",
+            favHobby: "What hobby did you say you enjoy most?",
+            favRelaxPlace: "Where did you say you like to go to relax?"
+        };
+        
+        return {
+            question: questionTemplates[factType] || "What did you tell me about yourself?",
+            factKey: factType,
+            correctAnswer: correctAnswer,
+            options: this.generateQuizOptions(correctAnswer, factType),
+            aiGenerated: false
+        };
     }
     
     showNextQuizQuestion() {

@@ -68,6 +68,46 @@ Remember your memory status: MEMORY_IMPAIRED = {memory_impaired}`,
 
 Remember your memory status: MEMORY_IMPAIRED = {memory_impaired}`,
 
+    // Quiz generation prompts
+    QUIZ_GENERATION_PROMPT: `Based on the collected facts about the user, generate a multiple choice question that tests memory of this specific fact: "{fact_content}"
+
+Requirements:
+- Question should be specific to what the user actually said
+- Generate 4 plausible answer choices (A, B, C, D)
+- One correct answer based on exact user input: "{correct_answer}"
+- Three realistic but incorrect distractors that fit the conversation context
+- Question text should sound natural and conversational
+- Avoid generic questions - make them specific to this conversation
+
+Format your response as:
+[THOUGHT]: <reasoning about the question and distractors>
+[RESPONSE]: 
+Question: <the question text>
+A) <option A>
+B) <option B> 
+C) <option C>
+D) <option D>
+Correct: <A/B/C/D>`,
+
+    DISTRACTOR_GENERATION_PROMPT: `Generate 3 realistic but incorrect answer options for this quiz question about what the user told me.
+
+User's actual answer: "{correct_answer}"
+Question context: "{question_context}" 
+Fact type: "{fact_type}"
+
+Generate 3 plausible distractors that:
+- Are similar in style/category to the correct answer
+- Sound realistic for this type of question
+- Are clearly different from the correct answer
+- Fit the conversational context
+
+Format as:
+[THOUGHT]: <reasoning about distractors>
+[RESPONSE]:
+1. <distractor 1>
+2. <distractor 2>
+3. <distractor 3>`,
+
     // Fact collection prompts for each type
     FACT_PROMPTS: {
         name: "What's your name? I'd love to know what to call you!",
@@ -158,6 +198,19 @@ function buildPrompt(characterType, phase, context, additionalData = {}) {
                 .replace('{options}', additionalData.options?.join(', ') || '')
                 .replace('{memory_impaired}', characterType === 'B');
             break;
+
+        case 'quiz_generation':
+            userPrompt = PROMPT_TEMPLATES.QUIZ_GENERATION_PROMPT
+                .replace('{fact_content}', additionalData.factContent || '')
+                .replace('{correct_answer}', additionalData.correctAnswer || '');
+            break;
+
+        case 'distractor_generation':
+            userPrompt = PROMPT_TEMPLATES.DISTRACTOR_GENERATION_PROMPT
+                .replace('{correct_answer}', additionalData.correctAnswer || '')
+                .replace('{question_context}', additionalData.questionContext || '')
+                .replace('{fact_type}', additionalData.factType || '');
+            break;
             
         case 'outro':
             userPrompt = PROMPT_TEMPLATES.OUTRO_PROMPT
@@ -188,6 +241,77 @@ function parseLLMResponse(response) {
     };
 }
 
+/**
+ * Parse quiz generation response to extract question and options
+ */
+function parseQuizGeneration(response) {
+    const parsed = parseLLMResponse(response);
+    const content = parsed.response;
+    
+    // Extract question
+    const questionMatch = content.match(/Question:\s*(.*?)(?=\n[A-D]\)|$)/s);
+    const question = questionMatch ? questionMatch[1].trim() : '';
+    
+    // Extract options
+    const optionMatches = content.match(/([A-D])\)\s*(.*?)(?=\n[A-D]\)|$)/gs);
+    const options = {};
+    const optionsList = [];
+    
+    if (optionMatches) {
+        optionMatches.forEach(match => {
+            const optionMatch = match.match(/([A-D])\)\s*(.*)/s);
+            if (optionMatch) {
+                const letter = optionMatch[1];
+                const text = optionMatch[2].trim();
+                options[letter] = text;
+                optionsList.push(text);
+            }
+        });
+    }
+    
+    // Extract correct answer
+    const correctMatch = content.match(/Correct:\s*([A-D])/);
+    const correctLetter = correctMatch ? correctMatch[1] : 'A';
+    const correctAnswer = options[correctLetter] || '';
+    
+    return {
+        thought: parsed.thought,
+        question: question,
+        options: optionsList,
+        correctAnswer: correctAnswer,
+        correctLetter: correctLetter,
+        optionsMap: options,
+        raw: response
+    };
+}
+
+/**
+ * Parse distractor generation response
+ */
+function parseDistractorGeneration(response) {
+    const parsed = parseLLMResponse(response);
+    const content = parsed.response;
+    
+    // Extract numbered distractors
+    const distractorMatches = content.match(/\d+\.\s*(.*?)(?=\n\d+\.|$)/gs);
+    const distractors = [];
+    
+    if (distractorMatches) {
+        distractorMatches.forEach(match => {
+            const distractorMatch = match.match(/\d+\.\s*(.*)/s);
+            if (distractorMatch) {
+                distractors.push(distractorMatch[1].trim());
+            }
+        });
+    }
+    
+    return {
+        thought: parsed.thought,
+        distractors: distractors,
+        raw: response
+    };
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -196,6 +320,8 @@ if (typeof module !== 'undefined' && module.exports) {
         buildContext,
         buildPrompt,
         parseLLMResponse,
+        parseQuizGeneration,
+        parseDistractorGeneration,
         filterFactsForImpairedMemory
     };
 }
