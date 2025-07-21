@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Conversation Study</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Header -->
+        <header id="game-header">
+            <h1>Interactive Conversation Study</h1>
+            <div id="session-info">
+                <span id="session-id"></span>
+                <span id="progress-indicator"></span>
+            </div>
+        </header>
+
+        <!-- Main Game Area -->
+        <main id="game-main">
+            <!-- Dialogue Display -->
+            <section id="dialogue-section">
+                <div id="character-name">AI Assistant</div>
+                <div id="dialogue-text"></div>
+                <div id="typing-indicator" class="hidden">...</div>
+            </section>
+
+            <!-- Input Section -->
+            <section id="input-section">
+                <!-- Text Input for Fact Collection -->
+                <div id="text-input-container" class="hidden">
+                    <label id="input-label"></label>
+                    <input type="text" id="text-input" maxlength="100" />
+                    <button id="submit-button">Submit</button>
+                </div>
+
+                <!-- Multiple Choice for Quiz -->
+                <div id="quiz-container" class="hidden">
+                    <div id="quiz-question"></div>
+                    <div id="quiz-options"></div>
+                </div>
+
+                <!-- Rating Scales -->
+                <div id="rating-container" class="hidden">
+                    <div id="rating-question"></div>
+                    <div id="rating-scale">
+                        <span class="scale-label">1<br>Strongly Disagree</span>
+                        <div id="scale-buttons">
+                            <button class="rating-btn" data-value="1">1</button>
+                            <button class="rating-btn" data-value="2">2</button>
+                            <button class="rating-btn" data-value="3">3</button>
+                            <button class="rating-btn" data-value="4">4</button>
+                            <button class="rating-btn" data-value="5">5</button>
+                            <button class="rating-btn" data-value="6">6</button>
+                            <button class="rating-btn" data-value="7">7</button>
+                        </div>
+                        <span class="scale-label">7<br>Strongly Agree</span>
+                    </div>
+                </div>
+
+                <!-- Continue Button -->
+                <div id="continue-container" class="hidden">
+                    <button id="continue-button">Continue</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer id="game-footer">
+            <button id="restart-button" class="hidden">Start New Session</button>
+            <div id="completion-status"></div>
+        </footer>
+
+        <!-- Data Export (Hidden) -->
+        <div id="data-export" class="hidden">
+            <h3>Session Complete</h3>
+            <p>Thank you for participating in this study.</p>
+            <button id="download-data">Download Session Data</button>
+            <textarea id="session-data" readonly></textarea>
+        </div>
+    </div>
+
+    <!-- Load JavaScript -->
+    <script src="config/flags.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

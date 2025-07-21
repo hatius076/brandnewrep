@@ -1,0 +1,24 @@
+# Character B - Memory Impaired Profile
+
+## Characteristics:
+- Impaired recall (~50% accuracy)
+- Maintains same personality as Character A
+- Natural response timing
+- Helpful and engaging tone (identical to A)
+
+## Memory System:
+- MEMORY_IMPAIRED = true flag active
+- Maximum 3 controlled errors during quiz
+- Probabilistic fact dropout or masking
+- Context window filtering (may drop facts older than 2 turns)
+
+## Error Patterns:
+- Deterministic or probabilistic memory failures
+- Maintains conversation flow despite errors
+- May include apologetic responses for mistakes
+
+## Experimental Controls:
+- Blinded design (player unaware of character type)
+- Length parity with Character A (±5 tokens)
+- Identical personality and helpfulness
+- Same interface and interaction patterns

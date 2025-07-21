@@ -1,0 +1,22 @@
+# Introduction Scene Template
+
+This scene handles the initial greeting and fact collection phase.
+
+## Flow:
+1. AI greets the player
+2. Collects 6 personal facts:
+   - Name
+   - Favorite food
+   - Favorite hobby
+   - Relaxation place
+   - Profession
+   - Bonus fact
+
+## Memory Implementation:
+- Character A: Perfect retention of all facts
+- Character B: May experience memory lapses during quiz phase
+
+## Response Generation:
+- Responses are generated dynamically based on player input
+- Response length limited to ≤20 tokens
+- Consistent tone and helpfulness across both characters

@@ -1,0 +1,25 @@
+# Quiz Scene Template
+
+This scene tests the AI's memory of previously collected facts.
+
+## Flow:
+1. AI announces memory test
+2. 4 sequential recall questions:
+   - What is your name?
+   - What is your favorite food?
+   - What is your hobby?
+   - Where do you relax?
+
+## Memory Accuracy:
+- Character A: 100% accuracy (perfect recall)
+- Character B: ~50% accuracy (controlled errors, max 3)
+
+## Question Format:
+- Multiple choice with 3-4 options
+- Correct answer + plausible distractors
+- AI selects answer automatically after brief delay
+
+## Error Handling:
+- Character B may select wrong answers
+- Optional apologetic responses for errors
+- Maintains natural conversation flow

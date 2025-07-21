@@ -1,0 +1,23 @@
+{
+  "sessionId": "",
+  "characterType": "",
+  "memoryImpaired": false,
+  "startTime": 0,
+  "endTime": 0,
+  "duration": 0,
+  "playerFacts": {
+    "name": "",
+    "favFood": "",
+    "favHobby": "",
+    "favRelaxPlace": "",
+    "profession": "",
+    "bonusFact": ""
+  },
+  "quizAnswers": [],
+  "ratings": {
+    "humanness": 0,
+    "desirability": 0
+  },
+  "memoryErrors": 0,
+  "dialogue": []
+}
