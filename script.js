@@ -9,7 +9,10 @@ class VisualNovelGame {
         this.state = {
             phase: 'init', // init, introduction, quiz, rating, complete
             currentStep: 0,
-            characterType: GAME_CONFIG.MEMORY_IMPAIRED ? 'B' : 'A',
+            currentAgent: 'A', // Start with Agent A, then B
+            agentAComplete: false,
+            agentBComplete: false,
+            characterType: 'A', // Always start with A
             sessionId: this.generateSessionId(),
             startTime: Date.now(),
             playerFacts: {},
@@ -19,7 +22,25 @@ class VisualNovelGame {
             memoryErrors: 0,
             llmEnabled: true,
             debugMode: false,
-            lastLLMThought: ''
+            lastLLMThought: '',
+            
+            // Dual-agent session storage
+            sessionRecords: {
+                agentA: {
+                    dialogue: [],
+                    memoryFlag: false,
+                    ratings: {},
+                    timestamp: null,
+                    exchangeLogs: []
+                },
+                agentB: {
+                    dialogue: [],
+                    memoryFlag: true,
+                    ratings: {},
+                    timestamp: null,
+                    exchangeLogs: []
+                }
+            }
         };
         
         this.elements = {};
@@ -48,6 +69,12 @@ class VisualNovelGame {
             dialogueText: document.getElementById('dialogue-text'),
             typingIndicator: document.getElementById('typing-indicator'),
             
+            // Enhanced loading and thought display
+            loadingAnimation: document.getElementById('loading-animation'),
+            thoughtDisplay: document.getElementById('thought-display'),
+            thoughtContent: document.getElementById('thought-content'),
+            toggleThought: document.getElementById('toggle-thought'),
+            
             textInputContainer: document.getElementById('text-input-container'),
             inputLabel: document.getElementById('input-label'),
             textInput: document.getElementById('text-input'),
@@ -65,13 +92,19 @@ class VisualNovelGame {
             continueButton: document.getElementById('continue-button'),
             
             restartButton: document.getElementById('restart-button'),
+            continueToAgentB: document.getElementById('continue-to-agent-b'),
             completionStatus: document.getElementById('completion-status'),
+            
+            // Agent progress indicators
+            agentProgress: document.getElementById('agent-progress'),
+            agentIndicator: document.getElementById('agent-indicator'),
+            progressFill: document.getElementById('progress-fill'),
             
             dataExport: document.getElementById('data-export'),
             downloadData: document.getElementById('download-data'),
             sessionData: document.getElementById('session-data'),
             
-            // New LLM-related elements
+            // LLM-related elements (existing)
             settingsButton: document.getElementById('settings-button'),
             settingsModal: document.getElementById('settings-modal'),
             closeSettings: document.getElementById('close-settings'),
@@ -106,6 +139,9 @@ class VisualNovelGame {
         // Continue button
         this.elements.continueButton.addEventListener('click', () => this.advanceDialogue());
         
+        // Continue to Agent B button
+        this.elements.continueToAgentB.addEventListener('click', () => this.startAgentB());
+        
         // Rating buttons
         this.elements.scaleButtons.addEventListener('click', (e) => {
             if (e.target.classList.contains('rating-btn')) {
@@ -119,7 +155,12 @@ class VisualNovelGame {
         // Data download
         this.elements.downloadData.addEventListener('click', () => this.downloadSessionData());
         
-        // Settings modal
+        // Enhanced thought display toggle
+        if (this.elements.toggleThought) {
+            this.elements.toggleThought.addEventListener('click', () => this.toggleThoughtDisplay());
+        }
+        
+        // Settings modal (existing)
         this.elements.settingsButton.addEventListener('click', () => this.openSettingsModal());
         this.elements.closeSettings.addEventListener('click', () => this.closeSettingsModal());
         this.elements.settingsModal.addEventListener('click', (e) => {
@@ -289,6 +330,14 @@ class VisualNovelGame {
     }
 
     /**
+     * Hide validation progress
+     */
+    hideValidationProgress() {
+        // Clear the validation progress display
+        this.elements.dialogueText.innerHTML = '';
+    }
+
+    /**
      * Show validation progress to user
      */
     showValidationProgress(message) {
@@ -315,11 +364,74 @@ class VisualNovelGame {
     }
 
     /**
-     * Hide validation progress
+     * Show enhanced loading animation
      */
-    hideValidationProgress() {
-        // Clear the validation progress display
-        this.elements.dialogueText.innerHTML = '';
+    showLoadingAnimation(message = 'AI is thinking...') {
+        this.elements.typingIndicator.classList.add('hidden');
+        this.elements.loadingAnimation.classList.remove('hidden');
+        this.elements.loadingAnimation.querySelector('.loading-text').textContent = message;
+    }
+    
+    /**
+     * Hide loading animation
+     */
+    hideLoadingAnimation() {
+        this.elements.loadingAnimation.classList.add('hidden');
+    }
+    
+    /**
+     * Display AI thoughts in enhanced debug mode
+     */
+    displayThought(thought) {
+        if (!this.state.debugMode || !thought) return;
+        
+        const thoughtDisplay = this.elements.thoughtDisplay;
+        const thoughtContent = this.elements.thoughtContent;
+        
+        if (GAME_CONFIG.UI.INLINE_THOUGHTS) {
+            // Inline mode
+            const inlineThought = document.createElement('div');
+            inlineThought.className = 'thought-inline';
+            inlineThought.innerHTML = `<span class="thought-label">[THOUGHT]:</span> ${thought}`;
+            
+            // Insert before dialogue text
+            const dialogueSection = document.getElementById('dialogue-section');
+            dialogueSection.insertBefore(inlineThought, this.elements.dialogueText);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (inlineThought.parentNode) {
+                    inlineThought.parentNode.removeChild(inlineThought);
+                }
+            }, 10000);
+        } else {
+            // Collapsible pane mode
+            thoughtContent.textContent = thought;
+            thoughtDisplay.classList.remove('hidden');
+            
+            // Auto-collapse after 15 seconds
+            setTimeout(() => {
+                if (!thoughtContent.classList.contains('collapsed')) {
+                    this.toggleThoughtDisplay();
+                }
+            }, 15000);
+        }
+    }
+    
+    /**
+     * Toggle thought display visibility
+     */
+    toggleThoughtDisplay() {
+        const thoughtContent = this.elements.thoughtContent;
+        const toggleBtn = this.elements.toggleThought;
+        
+        if (thoughtContent.classList.contains('collapsed')) {
+            thoughtContent.classList.remove('collapsed');
+            toggleBtn.textContent = '−';
+        } else {
+            thoughtContent.classList.add('collapsed');
+            toggleBtn.textContent = '+';
+        }
     }
     
     /**
@@ -532,12 +644,13 @@ class VisualNovelGame {
     generateQuizQuestions() {
         const questionTemplates = [
             "What did you tell me your name was?",
-            "You mentioned your favorite food earlier - what was it?",
+            "You mentioned your favorite food earlier - what was it?", 
             "What hobby did you say you enjoy most?",
-            "Where did you say you like to go to relax?"
+            "What was that interesting detail you shared about your hobby?",
+            "What did you say you do for work or study?"
         ];
         
-        const factKeys = ['name', 'favFood', 'favHobby', 'favRelaxPlace'];
+        const factKeys = ['name', 'favFood', 'favHobby', 'hobbyFact', 'profession'];
         
         return questionTemplates.map((template, index) => ({
             question: template,
@@ -555,8 +668,63 @@ class VisualNovelGame {
     startGame() {
         this.elements.sessionId.textContent = `Session: ${this.state.sessionId}`;
         this.updateProgressIndicator();
-        this.logEvent('game_start', { characterType: this.state.characterType });
+        this.updateAgentIndicator();
+        this.logEvent('game_start', { 
+            characterType: this.state.characterType,
+            dualAgentMode: true,
+            currentAgent: this.state.currentAgent
+        });
         this.enterPhase('introduction');
+    }
+    
+    updateAgentIndicator() {
+        this.elements.agentIndicator.textContent = `Agent ${this.state.currentAgent}`;
+        this.elements.characterName.textContent = `AI Assistant (Agent ${this.state.currentAgent})`;
+        
+        // Update progress bar
+        if (this.state.currentAgent === 'A') {
+            this.elements.progressFill.className = 'progress-fill agent-a';
+        } else {
+            this.elements.progressFill.className = 'progress-fill agent-b';
+        }
+    }
+    
+    async startAgentB() {
+        // Store Agent A session data
+        this.state.sessionRecords.agentA = {
+            dialogue: [...this.state.dialogue],
+            memoryFlag: false,
+            ratings: {...this.state.ratings},
+            timestamp: Date.now(),
+            exchangeLogs: [...this.state.dialogue],
+            playerFacts: {...this.state.playerFacts},
+            quizAnswers: [...this.state.quizAnswers]
+        };
+        
+        // Reset for Agent B
+        this.state.currentAgent = 'B';
+        this.state.characterType = 'B';
+        this.state.agentAComplete = true;
+        this.state.currentStep = 0;
+        this.state.phase = 'introduction';
+        this.state.dialogue = [];
+        this.state.quizAnswers = [];
+        this.state.ratings = {};
+        this.state.memoryErrors = 0;
+        
+        // Keep player facts but don't reset them
+        // Agent B will have memory impairment during conversations
+        
+        this.updateAgentIndicator();
+        this.hideAllInputs();
+        this.elements.continueToAgentB.classList.add('hidden');
+        
+        // Show transition message
+        await this.displayMessage("Now let's chat with a different AI assistant. This is Agent B!");
+        
+        setTimeout(() => {
+            this.enterPhase('introduction');
+        }, 2000);
     }
     
     updateProgressIndicator() {
@@ -654,17 +822,23 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
     async collectNextFact() {
         const factTypes = GAME_CONFIG.FACT_TYPES;
         if (this.state.currentStep >= factTypes.length) {
-            // All facts collected, move to quiz
-            this.enterPhase('quiz');
+            // All facts collected, add closing transition
+            await this.displayClosingTransition();
+            setTimeout(() => {
+                this.enterPhase('quiz');
+            }, 2000);
             return;
         }
         
+        // Enforce mandatory sequence - strict branching logic
+        const currentFactType = factTypes[this.state.currentStep];
+        
         // Generate dynamic question using LLM with fallback support
         try {
-            const prompt = await this.generateDynamicQuestion();
+            const prompt = await this.generateMandatoryQuestion(currentFactType);
             this.elements.inputLabel.textContent = prompt;
             this.elements.textInput.value = '';
-            this.elements.textInput.placeholder = 'Type your response here...';
+            this.elements.textInput.placeholder = this.getFactPlaceholder(currentFactType);
             this.elements.textInputContainer.classList.remove('hidden');
             this.elements.textInput.focus();
         } catch (error) {
@@ -672,13 +846,67 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
             
             // Show user-friendly error message but allow continuation
             console.log('🔄 Continuing with fallback conversation flow...');
-            const fallbackPrompt = this.generateFallbackQuestion(this.state.currentStep);
+            const fallbackPrompt = this.getMandatoryFallbackQuestion(currentFactType);
             this.elements.inputLabel.textContent = fallbackPrompt;
             this.elements.textInput.value = '';
-            this.elements.textInput.placeholder = 'Type your response here...';
+            this.elements.textInput.placeholder = this.getFactPlaceholder(currentFactType);
             this.elements.textInputContainer.classList.remove('hidden');
             this.elements.textInput.focus();
         }
+    }
+    
+    /**
+     * Display closing transition message after fact collection
+     */
+    async displayClosingTransition() {
+        const messages = [
+            "Thanks for sharing all that! Now let's test my memory...",
+            "That was wonderful learning about you! Let me see how well I remember everything...",
+            "I really enjoyed getting to know you! Now, let's see how good my memory is..."
+        ];
+        
+        const message = messages[Math.floor(Math.random() * messages.length)];
+        await this.displayMessage(message);
+    }
+    
+    /**
+     * Generate mandatory questions for specific fact types
+     */
+    async generateMandatoryQuestion(factType) {
+        const questionTemplates = {
+            name: "What's your name? I'd love to know what to call you!",
+            favFood: "What's your favorite food? I'm curious about your tastes!",
+            favHobby: "What hobby do you enjoy most in your free time?",
+            hobbyFact: "Tell me something unique or interesting about your hobby!",
+            profession: "What do you do for work or study?",
+            bonusFact: "Share a fun fact about yourself - or just say 'nothing' if you'd prefer to skip this one!"
+        };
+        
+        // Use predefined templates for mandatory sequence to ensure consistency
+        return questionTemplates[factType] || "Tell me something about yourself!";
+    }
+    
+    /**
+     * Get placeholder text for each fact type
+     */
+    getFactPlaceholder(factType) {
+        const placeholders = {
+            name: "Enter your name...",
+            favFood: "e.g., pizza, sushi, chocolate...",
+            favHobby: "e.g., reading, hiking, gaming...",
+            hobbyFact: "Something unique about this hobby...",
+            profession: "e.g., teacher, student, engineer...",
+            bonusFact: "Something interesting or just 'nothing'..."
+        };
+        
+        return placeholders[factType] || "Type your response here...";
+    }
+    
+    /**
+     * Fallback questions for mandatory sequence
+     */
+    getMandatoryFallbackQuestion(factType) {
+        return this.generateMandatoryQuestion(factType); // Use same templates as fallback
     }
     
     /**
@@ -774,7 +1002,13 @@ Respond with just the question, no additional text.`;
         if (!input) return;
         
         const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep];
-        this.state.playerFacts[factType] = input;
+        
+        // Handle bonus fact specially - allow "nothing" to skip quiz inclusion
+        if (factType === 'bonusFact' && input.toLowerCase().includes('nothing')) {
+            this.state.playerFacts[factType] = null; // Skip in quiz
+        } else {
+            this.state.playerFacts[factType] = input;
+        }
         
         this.logEvent('fact_collected', {
             factType: factType,
@@ -782,30 +1016,95 @@ Respond with just the question, no additional text.`;
             step: this.state.currentStep
         });
         
-        // Generate appropriate response
+        // Generate appropriate response with natural acknowledgment
         this.elements.textInputContainer.classList.add('hidden');
+        
+        // Show loading animation
+        this.showLoadingAnimation('Processing your response...');
         
         setTimeout(async () => {
             try {
-                const response = await this.generateFactResponse(factType, input);
+                const response = await this.generateNaturalAcknowledgment(factType, input);
+                this.hideLoadingAnimation();
                 await this.displayMessage(response);
                 this.state.currentStep++;
                 
+                // Add natural pause before next question
                 setTimeout(() => {
                     this.collectNextFact();
-                }, 1000);
+                }, this.getNaturalPause());
             } catch (error) {
                 console.error('Error generating response:', error);
-                // Continue with a generic response instead of blocking
-                console.log('🔄 Continuing with generic acknowledgment...');
-                await this.displayMessage("Thank you for sharing that with me!");
+                this.hideLoadingAnimation();
+                // Continue with a natural acknowledgment instead of blocking
+                console.log('🔄 Continuing with natural acknowledgment...');
+                const naturalResponse = this.getNaturalFallbackAcknowledgment(factType, input);
+                await this.displayMessage(naturalResponse);
                 this.state.currentStep++;
                 
                 setTimeout(() => {
                     this.collectNextFact();
-                }, 1000);
+                }, this.getNaturalPause());
             }
         }, this.getTypingDelay());
+    }
+    
+    /**
+     * Generate natural acknowledgments for each fact type
+     */
+    async generateNaturalAcknowledgment(factType, input) {
+        const acknowledgments = {
+            name: [
+                `Nice to meet you, ${input}! What a lovely name.`,
+                `${input} - I'll remember that! Great to meet you.`,
+                `Hi ${input}! Thanks for introducing yourself.`
+            ],
+            favFood: [
+                `${input}? That sounds delicious! I can see why that's your favorite.`,
+                `Mmm, ${input}! You have great taste.`,
+                `Oh, ${input}! That's a wonderful choice.`
+            ],
+            favHobby: [
+                `${input} sounds like such an engaging hobby! I love that.`,
+                `How cool! ${input} must be really fulfilling.`,
+                `That's awesome! ${input} is such a great way to spend time.`
+            ],
+            hobbyFact: [
+                `That's fascinating! Thanks for sharing that detail about your hobby.`,
+                `Wow, that's really interesting! I love learning unique things like that.`,
+                `That's such a cool fact! It really shows your passion.`
+            ],
+            profession: [
+                `${input} - that sounds like meaningful work!`,
+                `How interesting! Being a ${input} must be quite rewarding.`,
+                `That's great! ${input} is such an important role.`
+            ],
+            bonusFact: input.toLowerCase().includes('nothing') ? [
+                `No worries at all! Sometimes it's nice to keep some things private.`,
+                `That's perfectly fine! You've already shared so much with me.`
+            ] : [
+                `That's such a fun fact! Thanks for sharing that with me.`,
+                `How interesting! I love learning these personal details.`,
+                `That's really cool! What a great thing to know about you.`
+            ]
+        };
+        
+        const options = acknowledgments[factType] || [`Thanks for sharing that about ${factType}!`];
+        return options[Math.floor(Math.random() * options.length)];
+    }
+    
+    /**
+     * Get natural fallback acknowledgments
+     */
+    getNaturalFallbackAcknowledgment(factType, input) {
+        return this.generateNaturalAcknowledgment(factType, input); // Use same method as fallback
+    }
+    
+    /**
+     * Get natural pause duration between questions
+     */
+    getNaturalPause() {
+        return Math.random() * 1000 + 1500; // 1.5-2.5 seconds for natural pacing
     }
     
     async generateFactResponse(factType, value) {
@@ -954,23 +1253,29 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startQuiz() {
         try {
-            // API is required
+            // API is required but provide fallback when network fails
             if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-                throw new Error('API is required but not available');
+                console.log('🔄 Using fallback quiz intro due to API unavailability...');
+                const fallbackIntro = "Now I'd like to test my memory of what you've shared with me. Let's see how well I remember!";
+                await this.displayMessage(fallbackIntro);
+            } else {
+                const quizIntro = await this.generateLLMResponse('quiz', { 
+                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+                });
+                await this.displayMessage(quizIntro);
             }
-            
-            const quizIntro = await this.generateLLMResponse('quiz', { 
-                customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-            });
-            await this.displayMessage(quizIntro);
         } catch (error) {
             console.error('Error generating quiz intro:', error);
-            throw new Error('Cannot generate quiz intro: API is required but not available');
+            console.log('🔄 Using fallback quiz intro due to API error...');
+            const fallbackIntro = "Now I'd like to test my memory of what you've shared with me. Let's see how well I remember!";
+            await this.displayMessage(fallbackIntro);
         }
         
         // Generate quiz questions with options
         this.prepareQuizQuestions();
-        this.showNextQuizQuestion();
+        setTimeout(() => {
+            this.showNextQuizQuestion();
+        }, 2000);
     }
     
     prepareQuizQuestions() {
@@ -1007,7 +1312,7 @@ Keep it conversational and authentic. Be brief but warm.`;
             name: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan'],
             favFood: ['Pizza', 'Sushi', 'Tacos', 'Pasta', 'Burgers', 'Ice cream'],
             favHobby: ['Reading', 'Gaming', 'Cooking', 'Hiking', 'Music', 'Photography'],
-            favRelaxPlace: ['Beach', 'Mountains', 'Home', 'Park', 'Library', 'Coffee shop'],
+            hobbyFact: ['I do it every day', 'I\'ve been doing it for years', 'It\'s very relaxing', 'I learned it online'],
             profession: ['Teacher', 'Engineer', 'Artist', 'Writer', 'Doctor', 'Student'],
             bonusFact: ['I love traveling', 'I have two cats', 'I speak three languages', 'I play guitar']
         };
@@ -1211,39 +1516,96 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
     
     completeSession() {
+        if (this.state.currentAgent === 'A' && !this.state.agentAComplete) {
+            // Agent A completed, prepare for Agent B
+            this.state.agentAComplete = true;
+            this.state.endTime = Date.now();
+            this.state.duration = this.state.endTime - this.state.startTime;
+            
+            this.logEvent('agent_a_complete', {
+                duration: this.state.duration,
+                totalQuestions: this.state.quizAnswers.length,
+                correctAnswers: this.state.quizAnswers.filter(a => a.isCorrect).length,
+                memoryErrors: this.state.memoryErrors,
+                ratings: this.state.ratings
+            });
+            
+            this.elements.completionStatus.textContent = 
+                `Agent A completed! Time: ${Math.round(this.state.duration / 60000)} minutes`;
+            this.elements.continueToAgentB.classList.remove('hidden');
+            
+            return; // Don't show final completion yet
+        }
+        
+        // Both agents completed
+        this.state.agentBComplete = true;
         this.state.endTime = Date.now();
         this.state.duration = this.state.endTime - this.state.startTime;
         
+        // Store Agent B session data
+        this.state.sessionRecords.agentB = {
+            dialogue: [...this.state.dialogue],
+            memoryFlag: true,
+            ratings: {...this.state.ratings},
+            timestamp: Date.now(),
+            exchangeLogs: [...this.state.dialogue],
+            playerFacts: {...this.state.playerFacts},
+            quizAnswers: [...this.state.quizAnswers]
+        };
+        
         this.logEvent('session_complete', {
             duration: this.state.duration,
-            totalQuestions: this.state.quizAnswers.length,
-            correctAnswers: this.state.quizAnswers.filter(a => a.isCorrect).length,
-            memoryErrors: this.state.memoryErrors,
-            ratings: this.state.ratings
+            agentAData: this.state.sessionRecords.agentA,
+            agentBData: this.state.sessionRecords.agentB,
+            bothAgentsCompleted: true
         });
         
-        this.elements.completionStatus.textContent = 
-            `Session completed in ${Math.round(this.state.duration / 60000)} minutes`;
+        this.elements.completionStatus.innerHTML = `
+            <div><strong>Study Completed!</strong></div>
+            <div>Total time: ${Math.round(this.state.duration / 60000)} minutes</div>
+            <div>Both Agent A and Agent B evaluations complete</div>
+        `;
         this.elements.restartButton.classList.remove('hidden');
+        this.elements.continueToAgentB.classList.add('hidden');
         
-        // Show data export option
-        this.prepareDataExport();
+        // Show data export option with dual session support
+        this.prepareDualAgentDataExport();
         this.elements.dataExport.classList.remove('hidden');
+        
+        // Update final progress
+        this.elements.progressFill.className = 'progress-fill agent-b';
     }
     
-    prepareDataExport() {
+    prepareDualAgentDataExport() {
         const exportData = {
             sessionId: this.state.sessionId,
-            characterType: this.state.characterType,
-            memoryImpaired: GAME_CONFIG.MEMORY_IMPAIRED,
+            dualAgentMode: true,
             startTime: this.state.startTime,
             endTime: this.state.endTime,
-            duration: this.state.duration,
+            totalDuration: this.state.duration,
+            
+            // Independent session records
+            agentA: {
+                ...this.state.sessionRecords.agentA,
+                characterType: 'A',
+                memoryImpaired: false
+            },
+            agentB: {
+                ...this.state.sessionRecords.agentB,
+                characterType: 'B', 
+                memoryImpaired: true
+            },
+            
+            // Combined player facts (should be consistent)
             playerFacts: this.state.playerFacts,
-            quizAnswers: this.state.quizAnswers,
-            ratings: this.state.ratings,
-            memoryErrors: this.state.memoryErrors,
-            dialogue: this.state.dialogue
+            
+            // Study metadata
+            studyMetadata: {
+                agentInitializationOrder: 'A_first_then_B',
+                factGatheringSequence: GAME_CONFIG.FACT_TYPES,
+                debugModeUsed: this.state.debugMode,
+                completedAt: new Date().toISOString()
+            }
         };
         
         this.elements.sessionData.value = JSON.stringify(exportData, null, 2);
@@ -1267,30 +1629,52 @@ Keep it conversational and authentic. Be brief but warm.`;
         location.reload();
     }
     
-    async displayMessage(text) {
-        this.elements.typingIndicator.classList.remove('hidden');
+    async displayMessage(text, thought = null) {
+        // Show loading animation first
+        this.showLoadingAnimation();
         
-        // Simulate typing delay
+        // Simulate thinking delay
         await new Promise(resolve => setTimeout(resolve, this.getTypingDelay()));
         
-        this.elements.typingIndicator.classList.add('hidden');
+        // Hide loading and show message
+        this.hideLoadingAnimation();
         this.elements.dialogueText.textContent = text;
-        this.elements.dialogueText.classList.add('fade-in');
+        this.elements.dialogueText.classList.add('dialogue-enter');
+        
+        // Display thought if provided and debug mode is on
+        if (thought) {
+            this.state.lastLLMThought = thought;
+            this.displayThought(thought);
+        }
         
         // Log the message
         this.logEvent('message_displayed', {
             text: text,
+            thought: thought,
             phase: this.state.phase,
-            step: this.state.currentStep
+            step: this.state.currentStep,
+            agent: this.state.currentAgent
         });
         
-        // Add to dialogue history
+        // Add to dialogue history with enhanced metadata
         this.state.dialogue.push({
             timestamp: Date.now(),
             speaker: 'AI',
             text: text,
-            phase: this.state.phase
+            thought: thought,
+            phase: this.state.phase,
+            agent: this.state.currentAgent
         });
+        
+        // Update debug info
+        if (this.state.debugMode) {
+            this.updateDebugInfo();
+        }
+        
+        // Remove animation class after completion
+        setTimeout(() => {
+            this.elements.dialogueText.classList.remove('dialogue-enter');
+        }, 500);
     }
     
     getTypingDelay() {
