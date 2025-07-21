@@ -68,15 +68,7 @@ Remember your memory status: MEMORY_IMPAIRED = {memory_impaired}`,
 
 Remember your memory status: MEMORY_IMPAIRED = {memory_impaired}`,
 
-    // Fact collection prompts for each type
-    FACT_PROMPTS: {
-        name: "What's your name? I'd love to know what to call you!",
-        favFood: "What's your favorite food? I'm curious about your tastes!",
-        favHobby: "What hobby do you enjoy most in your free time?",
-        favRelaxPlace: "Where do you like to go to relax and unwind?",
-        profession: "What do you do for work or study?",
-        bonusFact: "Tell me something interesting about yourself!"
-    }
+    // Note: Static fact prompts removed - using AI-driven conversation instead
 };
 
 /**

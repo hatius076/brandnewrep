@@ -45,7 +45,6 @@ class VisualNovelGame {
             typingIndicator: document.getElementById('typing-indicator'),
             
             textInputContainer: document.getElementById('text-input-container'),
-            inputLabel: document.getElementById('input-label'),
             textInput: document.getElementById('text-input'),
             submitButton: document.getElementById('submit-button'),
             
@@ -137,15 +136,8 @@ class VisualNovelGame {
         // For now, we'll use embedded dialogue data
         this.dialogueData = {
             introduction: {
-                greeting: this.getGreetingMessage(),
-                factPrompts: {
-                    name: "What's your name? I'd love to know what to call you!",
-                    favFood: "What's your favorite food? I'm curious about your tastes!",
-                    favHobby: "What hobby do you enjoy most in your free time?",
-                    favRelaxPlace: "Where do you like to go to relax and unwind?",
-                    profession: "What do you do for work or study?",
-                    bonusFact: "Tell me something interesting about yourself!"
-                }
+                greeting: this.getGreetingMessage()
+                // Note: Static factPrompts removed - using AI-driven conversation instead
             },
             quiz: this.generateQuizQuestions(),
             outro: this.getOutroMessage(),
@@ -469,7 +461,7 @@ class VisualNovelGame {
             let greeting;
             if (this.state.llmEnabled && window.apiConfig.isOnline) {
                 greeting = await this.generateLLMResponse('introduction', { 
-                    customPrompt: "Greet the user warmly and ask to learn about them. Be friendly and personable." 
+                    customPrompt: "Greet the user warmly and ask an open-ended question to start getting to know them. Be friendly and personable." 
                 });
             } else {
                 greeting = window.fallbackSystem.generateResponse('introduction').response;
@@ -480,93 +472,146 @@ class VisualNovelGame {
             const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
             await this.displayMessage(fallbackGreeting);
         }
-        this.collectNextFact();
+        
+        // Enable input for user response - no more automatic static questions
+        this.showUserInput();
     }
     
-    collectNextFact() {
-        const factTypes = GAME_CONFIG.FACT_TYPES;
-        if (this.state.currentStep >= factTypes.length) {
-            // All facts collected, move to quiz
-            this.enterPhase('quiz');
-            return;
-        }
-        
-        const currentFactType = factTypes[this.state.currentStep];
-        const prompt = this.dialogueData.introduction.factPrompts[currentFactType];
-        
-        this.elements.inputLabel.textContent = prompt;
+    showUserInput() {
+        // Show text input interface for user response
         this.elements.textInput.value = '';
         this.elements.textInput.placeholder = 'Type your response here...';
         this.elements.textInputContainer.classList.remove('hidden');
         this.elements.textInput.focus();
     }
     
+    shouldTransitionToQuiz() {
+        // Transition to quiz after collecting enough facts through natural conversation
+        const factsCollected = Object.keys(this.state.playerFacts).length;
+        return factsCollected >= 4; // Minimum facts needed for a meaningful quiz
+    }
+    
     async handleTextSubmit() {
         const input = this.elements.textInput.value.trim();
         if (!input) return;
         
-        const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep];
+        // Record the fact dynamically
+        const factType = this.inferFactType(input);
         this.state.playerFacts[factType] = input;
         
         this.logEvent('fact_collected', {
             factType: factType,
             value: input,
-            step: this.state.currentStep
+            totalFacts: Object.keys(this.state.playerFacts).length
         });
         
-        // Generate appropriate response
+        // Hide input and show AI is responding
         this.elements.textInputContainer.classList.add('hidden');
         
+        // Generate contextual AI response
         setTimeout(async () => {
             try {
-                const response = await this.generateFactResponse(factType, input);
+                const response = await this.generateContextualResponse(input);
                 await this.displayMessage(response);
-                this.state.currentStep++;
                 
+                // Check if we should transition to quiz or continue conversation
                 setTimeout(() => {
-                    this.collectNextFact();
+                    if (this.shouldTransitionToQuiz()) {
+                        this.enterPhase('quiz');
+                    } else {
+                        // Continue natural conversation - show input for next response
+                        this.showUserInput();
+                    }
                 }, 1000);
             } catch (error) {
                 console.error('Error generating response:', error);
-                // Fallback to static response
-                const fallbackResponse = window.fallbackSystem.generateResponse('introduction', {
-                    factType: factType,
-                    value: input
-                });
-                await this.displayMessage(fallbackResponse.response);
-                this.state.currentStep++;
-                
+                // Fallback response
+                await this.displayMessage("That's interesting! Tell me more about yourself.");
                 setTimeout(() => {
-                    this.collectNextFact();
+                    if (this.shouldTransitionToQuiz()) {
+                        this.enterPhase('quiz');
+                    } else {
+                        this.showUserInput();
+                    }
                 }, 1000);
             }
         }, this.getTypingDelay());
     }
     
-    async generateFactResponse(factType, value) {
+    inferFactType(input) {
+        // Dynamically infer what type of fact this is
+        const lower = input.toLowerCase();
+        
+        if (lower.includes('name') || lower.match(/i'm|i am|call me/)) {
+            return 'name';
+        }
+        if (lower.includes('work') || lower.includes('job') || lower.includes('career')) {
+            return 'profession';
+        }
+        if (lower.includes('hobby') || lower.includes('enjoy') || lower.includes('love doing')) {
+            return 'favHobby';
+        }
+        if (lower.includes('food') || lower.includes('eat') || lower.includes('cooking')) {
+            return 'favFood';
+        }
+        if (lower.includes('relax') || lower.includes('unwind') || lower.includes('peaceful')) {
+            return 'favRelaxPlace';
+        }
+        
+        // Generate a unique key for this fact
+        return `fact_${Object.keys(this.state.playerFacts).length + 1}`;
+    }
+    
+    async generateContextualResponse(userInput) {
         // Use LLM if enabled and available
         if (this.state.llmEnabled && window.apiConfig.isOnline) {
             try {
-                return await this.generateLLMResponse('introduction', { factType, value });
+                return await this.generateLLMResponse('introduction', { 
+                    customPrompt: `The user just said: "${userInput}". Generate a natural, engaging follow-up response that acknowledges what they shared and asks a relevant question to continue getting to know them. Be conversational and interested.`,
+                    userInput: userInput
+                });
             } catch (error) {
-                console.warn('LLM request failed, falling back to static response:', error);
-                // Fall through to static response
+                console.warn('LLM request failed, falling back to contextual response:', error);
+                // Fall through to contextual response
             }
         }
         
-        // Fallback to static responses
-        const responses = {
-            name: [`Nice to meet you, ${value}!`, `Great, ${value} is a lovely name!`, `Thanks for sharing, ${value}!`],
-            favFood: [`${value} sounds delicious!`, `I bet ${value} is really tasty!`, `Interesting choice with ${value}!`],
-            favHobby: [`${value} sounds like a fun hobby!`, `That's cool that you enjoy ${value}!`, `${value} must be really enjoyable!`],
-            favRelaxPlace: [`${value} sounds like a peaceful place!`, `That sounds like a great spot to unwind!`, `I can imagine ${value} being very relaxing!`],
-            profession: [`That's interesting work!`, `Sounds like a meaningful profession!`, `Your work must be quite engaging!`],
-            bonusFact: [`That's really interesting!`, `What a cool fact about yourself!`, `Thanks for sharing that with me!`]
-        };
-        
-        const options = responses[factType] || ['Thanks for sharing that!'];
-        return options[Math.floor(Math.random() * options.length)];
+        // Generate contextual response based on user input
+        return this.generateFallbackResponse(userInput);
     }
+    
+    generateFallbackResponse(userInput) {
+        const lower = userInput.toLowerCase();
+        
+        // Context-aware responses
+        if (lower.includes('work') || lower.includes('job')) {
+            return "That sounds like interesting work! What do you enjoy most about it?";
+        }
+        if (lower.includes('hobby') || lower.includes('enjoy')) {
+            return "That's a great hobby! How did you get started with that?";
+        }
+        if (lower.includes('travel') || lower.includes('place')) {
+            return "Travel is wonderful! What's your favorite place you've visited?";
+        }
+        if (lower.includes('food') || lower.includes('cook')) {
+            return "I love hearing about food preferences! Do you enjoy cooking too?";
+        }
+        if (lower.includes('relax') || lower.includes('unwind')) {
+            return "That sounds very peaceful! What else helps you feel relaxed?";
+        }
+        
+        // Generic but engaging responses
+        const responses = [
+            "That's fascinating! Tell me more about what makes that special to you.",
+            "I find that really interesting! What else would you like me to know about you?",
+            "Thanks for sharing that with me! What's something else that's important in your life?",
+            "That gives me great insight into who you are! What other interests do you have?"
+        ];
+        
+        return responses[Math.floor(Math.random() * responses.length)];
+    }
+    
+    // Note: generateFactResponse method removed - replaced with generateContextualResponse for AI-driven conversation
     
     /**
      * Generate LLM response using prompt templates
