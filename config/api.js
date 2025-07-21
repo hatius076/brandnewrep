@@ -14,8 +14,40 @@ class APIConfig {
         this.lastRequestTime = 0;
         this.requestCount = 0;
         this.estimatedCost = 0;
+        this.apiKeySource = null; // 'env' or 'localStorage' or null
         
+        // Initialize asynchronously to support .env loading
+        this.initPromise = this.initialize();
+    }
+
+    /**
+     * Initialize API configuration by trying .env first, then localStorage
+     */
+    async initialize() {
+        try {
+            // Try to load from .env file first
+            if (window.envLoader) {
+                const envLoaded = await window.envLoader.loadEnvFile();
+                if (envLoaded && window.envLoader.has('OPENAI_API_KEY')) {
+                    const envApiKey = window.envLoader.get('OPENAI_API_KEY');
+                    if (envApiKey && envApiKey.trim()) {
+                        this.apiKey = envApiKey.trim();
+                        this.apiKeySource = 'env';
+                        console.log('API key loaded from .env file');
+                        
+                        // Validate the key from .env
+                        this.isOnline = await this.validateApiKey();
+                        return;
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Error loading from .env file:', error);
+        }
+
+        // Fallback to localStorage
         this.loadStoredConfig();
+        this.apiKeySource = this.apiKey ? 'localStorage' : null;
     }
 
     /**
@@ -58,6 +90,8 @@ class APIConfig {
      */
     async setApiKey(key) {
         this.apiKey = key?.trim();
+        this.apiKeySource = this.apiKey ? 'localStorage' : null;
+        
         if (this.apiKey) {
             this.isOnline = await this.validateApiKey();
         } else {
@@ -216,11 +250,20 @@ class APIConfig {
     }
 
     /**
-     * Get safe display of API key (masked)
+     * Get safe display of API key (masked) with source information
      */
     getMaskedApiKey() {
         if (!this.apiKey) return 'Not configured';
-        return `sk-...${this.apiKey.slice(-4)}`;
+        const masked = `sk-...${this.apiKey.slice(-4)}`;
+        const source = this.apiKeySource ? ` (from ${this.apiKeySource === 'env' ? '.env file' : 'localStorage'})` : '';
+        return masked + source;
+    }
+
+    /**
+     * Get the source of the current API key
+     */
+    getApiKeySource() {
+        return this.apiKeySource;
     }
 
     /**
@@ -228,6 +271,7 @@ class APIConfig {
      */
     clearConfig() {
         this.apiKey = null;
+        this.apiKeySource = null;
         this.isOnline = false;
         this.resetUsageStats();
         localStorage.removeItem('llm_config');

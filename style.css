@@ -528,6 +528,26 @@ body {
     color: #856404;
 }
 
+.setting-info {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.setting-info.env {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.setting-info.localStorage {
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
 .setting-status {
     padding: 1rem;
     background-color: #f8f9fa;
