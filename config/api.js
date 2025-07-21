@@ -21,111 +21,68 @@ class APIConfig {
     }
 
     /**
-     * Initialize API configuration - requires .env API key as hard requirement ONLY if .env file exists
+     * Initialize API configuration - requires .env file with valid API key as hard requirement
      */
     async initialize() {
         try {
-            // Try to load from .env file first
-            if (window.envLoader) {
-                const envLoaded = await window.envLoader.loadEnvFile();
-                if (envLoaded) {
-                    // .env file exists, API key is now a hard requirement
-                    const envApiKey = window.envLoader.get('OPENAI_API_KEY');
-                    if (!envApiKey || !envApiKey.trim()) {
-                        throw new Error('OPENAI_API_KEY is required in .env file but is missing or empty');
-                    }
-                    
-                    this.apiKey = envApiKey.trim();
-                    this.apiKeySource = 'env';
-                    console.log('API key loaded from .env file');
-                    
-                    // Validate the key from .env - this is mandatory
-                    this.isOnline = await this.validateApiKey();
-                    if (!this.isOnline) {
-                        throw new Error('OPENAI_API_KEY from .env file is invalid or cannot connect to OpenAI API');
-                    }
-                    return;
-                } else {
-                    // .env file doesn't exist - fallback to localStorage is allowed
-                    console.log('No .env file found, falling back to localStorage');
-                    this.loadStoredConfig();
-                    this.apiKeySource = this.apiKey ? 'localStorage' : null;
-                    if (this.apiKey) {
-                        this.isOnline = await this.validateApiKey();
-                    }
-                    return;
-                }
-            } else {
+            // Always require .env file to exist
+            if (!window.envLoader) {
                 throw new Error('Environment loader not available');
             }
+            
+            const envLoaded = await window.envLoader.loadEnvFile();
+            if (!envLoaded) {
+                throw new Error('.env file is required but could not be loaded. Please create a .env file with a valid OPENAI_API_KEY.');
+            }
+            
+            // .env file exists, API key is now a hard requirement
+            const envApiKey = window.envLoader.get('OPENAI_API_KEY');
+            if (!envApiKey || !envApiKey.trim()) {
+                throw new Error('OPENAI_API_KEY is required in .env file but is missing or empty');
+            }
+            
+            this.apiKey = envApiKey.trim();
+            this.apiKeySource = 'env';
+            console.log('API key loaded from .env file');
+            
+            // Validate the key from .env - this is mandatory
+            this.isOnline = await this.validateApiKey();
+            if (!this.isOnline) {
+                throw new Error('OPENAI_API_KEY from .env file is invalid or cannot connect to OpenAI API');
+            }
+            
+            console.log('✅ .env API key validation successful');
+            return;
         } catch (error) {
             console.error('Failed to initialize API:', error);
-            // If the error is related to .env file being present but having issues, throw it
-            if (error.message.includes('.env file') && !error.message.includes('could not be loaded')) {
-                this.apiKey = null;
-                this.apiKeySource = null;
-                this.isOnline = false;
-                throw error;
-            }
-            // Otherwise, allow fallback to localStorage
-            console.log('Falling back to localStorage configuration');
-            this.loadStoredConfig();
-            this.apiKeySource = this.apiKey ? 'localStorage' : null;
-            if (this.apiKey) {
-                this.isOnline = await this.validateApiKey();
-            }
+            this.apiKey = null;
+            this.apiKeySource = null;
+            this.isOnline = false;
+            throw error;
         }
     }
 
     /**
-     * Load configuration from localStorage
+     * Load configuration - DISABLED when .env is required
      */
     loadStoredConfig() {
-        try {
-            const stored = localStorage.getItem('llm_config');
-            if (stored) {
-                const config = JSON.parse(stored);
-                this.apiKey = config.apiKey;
-                this.model = config.model || 'gpt-4';
-                this.temperature = config.temperature || 0.7;
-                this.maxTokens = config.maxTokens || 500;
-            }
-        } catch (error) {
-            console.warn('Failed to load stored API config:', error);
-        }
+        // No-op: configuration must come from .env file only
+        console.log('localStorage configuration loading disabled - API key must come from .env file');
     }
 
     /**
-     * Save configuration to localStorage
+     * Save configuration - DISABLED when .env is required
      */
     saveConfig() {
-        try {
-            const config = {
-                apiKey: this.apiKey,
-                model: this.model,
-                temperature: this.temperature,
-                maxTokens: this.maxTokens
-            };
-            localStorage.setItem('llm_config', JSON.stringify(config));
-        } catch (error) {
-            console.warn('Failed to save API config:', error);
-        }
+        // No-op: configuration is managed via .env file only
+        console.log('Configuration saving disabled - API key managed via .env file');
     }
 
     /**
-     * Set API key and validate it
+     * Set API key - DISABLED when .env is required
      */
     async setApiKey(key) {
-        this.apiKey = key?.trim();
-        this.apiKeySource = this.apiKey ? 'localStorage' : null;
-        
-        if (this.apiKey) {
-            this.isOnline = await this.validateApiKey();
-        } else {
-            this.isOnline = false;
-        }
-        this.saveConfig();
-        return this.isOnline;
+        throw new Error('Manual API key setting is disabled. API key must be configured in .env file.');
     }
 
     /**
@@ -300,28 +257,24 @@ class APIConfig {
     }
 
     /**
-     * Check if .env file is being used (only when .env file exists and was loaded)
+     * Check if .env file is required (always true in strict mode)
      */
     isEnvExpected() {
-        return this.apiKeySource === 'env' || (window.envLoader?.wasLoadAttempted() && window.envLoader?.isLoaded());
+        return true; // Always require .env file
     }
 
     /**
-     * Check if .env API key is required (when .env file exists)
+     * Check if .env API key is required (always true in strict mode)
      */
     isEnvRequired() {
-        return window.envLoader?.wasLoadAttempted() && window.envLoader?.isLoaded();
+        return true; // Always require .env file
     }
 
     /**
-     * Clear all configuration
+     * Clear all configuration - DISABLED when .env is required
      */
     clearConfig() {
-        this.apiKey = null;
-        this.apiKeySource = null;
-        this.isOnline = false;
-        this.resetUsageStats();
-        localStorage.removeItem('llm_config');
+        throw new Error('Configuration clearing is disabled. API key must be managed via .env file.');
     }
 }
 
@@ -539,21 +492,14 @@ class FallbackResponseSystem {
 window.apiConfig = new APIConfig();
 window.fallbackSystem = new FallbackResponseSystem();
 
-// Initialize system and disable fallback if .env is expected
+// Always disable fallback system in strict .env mode
+window.fallbackSystem.disable();
+console.log('Fallback system permanently disabled - valid .env API key is required');
+
+// Initialize system and handle errors by blocking application
 window.apiConfig.initPromise.then(() => {
-    if (window.apiConfig.isEnvExpected()) {
-        console.log('Disabling fallback system - .env API key is required');
-        window.fallbackSystem.disable();
-    } else {
-        console.log('Fallback system enabled - no .env file detected');
-        window.fallbackSystem.enable();
-    }
+    console.log('✅ API configuration successful');
 }).catch(error => {
-    console.error('API initialization failed:', error);
-    // Only disable fallback if .env was expected but failed
-    if (window.apiConfig.isEnvExpected()) {
-        window.fallbackSystem.disable();
-    } else {
-        window.fallbackSystem.enable();
-    }
+    console.error('❌ API initialization failed - application blocked:', error);
+    // Fallback system remains disabled even on error
 });

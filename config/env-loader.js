@@ -13,6 +13,7 @@ class EnvLoader {
     /**
      * Attempt to load and parse .env file
      * This works by fetching the .env file as a text resource
+     * Returns false if file is missing (required for strict mode)
      */
     async loadEnvFile() {
         if (this.loadAttempted) {
@@ -28,7 +29,11 @@ class EnvLoader {
             });
 
             if (!response.ok) {
-                console.warn('Could not load .env file:', response.status, response.statusText);
+                if (response.status === 404) {
+                    console.error('.env file not found. This file is required for the application to function.');
+                } else {
+                    console.error('Could not load .env file:', response.status, response.statusText);
+                }
                 return false;
             }
 
@@ -39,7 +44,7 @@ class EnvLoader {
             return true;
 
         } catch (error) {
-            console.warn('Failed to load .env file:', error.message);
+            console.error('Failed to load .env file:', error.message);
             return false;
         }
     }
