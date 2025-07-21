@@ -138,39 +138,86 @@ class VisualNovelGame {
     }
     
     /**
-     * Display API configuration error and block application
+     * Display API configuration error and block application with improved feedback
      */
     displayApiError(errorMessage) {
         // Clear any existing content
         this.hideAllInputs();
         
-        // Display error message in dialogue area
+        // Parse error type for better user guidance
+        let errorType = 'Configuration Error';
+        let additionalHelp = '';
+        
+        if (errorMessage.includes('api-key.txt file is required')) {
+            errorType = 'Missing api-key.txt File';
+            additionalHelp = `
+                <div style="background-color: #e7f3ff; border: 1px solid #b8daff; border-radius: 4px; padding: 15px; margin: 15px 0;">
+                    <h4 style="margin-top: 0; color: #004085;">🛠️ How to create api-key.txt:</h4>
+                    <ol style="margin-bottom: 0;">
+                        <li>Create a new file named <code>api-key.txt</code> in the same directory as this HTML file</li>
+                        <li>Open the file in a text editor</li>
+                        <li>Paste your OpenAI API key (it should start with <code>sk-</code>)</li>
+                        <li>Save the file and refresh this page</li>
+                    </ol>
+                </div>
+            `;
+        } else if (errorMessage.includes('missing or empty')) {
+            errorType = 'Empty API Key';
+            additionalHelp = `
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin: 15px 0;">
+                    <h4 style="margin-top: 0; color: #856404;">📝 The api-key.txt file exists but is empty</h4>
+                    <p style="margin-bottom: 0;">Open the api-key.txt file and add your OpenAI API key. The key should start with "sk-" and be about 50 characters long.</p>
+                </div>
+            `;
+        } else if (errorMessage.includes('failed validation')) {
+            errorType = 'API Key Validation Failed';
+            additionalHelp = `
+                <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; margin: 15px 0;">
+                    <h4 style="margin-top: 0; color: #721c24;">🔍 Validation Failed</h4>
+                    <p><strong>Possible causes:</strong></p>
+                    <ul style="margin-bottom: 0;">
+                        <li>The API key is invalid or expired</li>
+                        <li>No internet connection</li>
+                        <li>OpenAI API is temporarily unavailable</li>
+                        <li>Browser is blocking the validation request (CORS policy)</li>
+                    </ul>
+                </div>
+            `;
+        }
+        
+        // Display comprehensive error message
         this.elements.dialogueText.innerHTML = `
             <div style="color: #dc3545; border: 2px solid #dc3545; border-radius: 8px; padding: 20px; margin: 20px 0; background-color: #f8d7da;">
-                <h3 style="margin-top: 0; color: #721c24;">⚠️ Configuration Error</h3>
-                <p><strong>The application cannot start:</strong></p>
-                <p>${errorMessage}</p>
+                <h3 style="margin-top: 0; color: #721c24;">⚠️ ${errorType}</h3>
+                <div style="background-color: white; border-radius: 4px; padding: 15px; margin: 10px 0; color: #000;">
+                    <strong>Error details:</strong><br>
+                    ${errorMessage.replace(/\n/g, '<br>')}
+                </div>
+                ${additionalHelp}
                 <hr style="border-color: #dc3545;">
-                <p><strong>To fix this:</strong></p>
-                <ul>
-                    <li>Add a valid OpenAI API key to your <code>api-key.txt</code> file</li>
-                    <li>Ensure the key starts with <code>sk-</code></li>
-                    <li>Verify you have internet connectivity</li>
-                    <li>Refresh the page after updating the api-key.txt file</li>
+                <h4 style="color: #721c24;">🔧 General Troubleshooting:</h4>
+                <ul style="margin-bottom: 10px;">
+                    <li><strong>Check file location:</strong> Ensure api-key.txt is in the same directory as index.html</li>
+                    <li><strong>Verify key format:</strong> API key should start with "sk-" and be ~50 characters</li>
+                    <li><strong>Test internet:</strong> Make sure you have a working internet connection</li>
+                    <li><strong>Check browser console:</strong> Look for additional error messages</li>
                 </ul>
+                <div style="background-color: #d1ecf1; border: 1px solid #b8daff; border-radius: 4px; padding: 10px; margin: 10px 0;">
+                    <strong>🔄 After making changes:</strong> Refresh this page to retry the validation process.
+                </div>
             </div>
         `;
         
         // Hide settings button and show reload option
         this.elements.settingsButton.style.display = 'none';
         this.elements.restartButton.classList.remove('hidden');
-        this.elements.restartButton.textContent = 'Reload Application';
+        this.elements.restartButton.textContent = '🔄 Retry Validation';
         
-        // Update progress indicator
-        this.elements.progressIndicator.textContent = 'Configuration Error';
+        // Update progress indicator with more specific status
+        this.elements.progressIndicator.textContent = errorType;
         this.elements.progressIndicator.style.color = '#dc3545';
         
-        console.error('Application blocked due to API configuration error:', errorMessage);
+        console.error(`❌ Application blocked due to API configuration error (${errorType}):`, errorMessage);
     }
 
     loadDialogueData() {
@@ -202,6 +249,9 @@ class VisualNovelGame {
      */
     async initializeLLMSystem() {
         try {
+            // Show validation progress to user
+            this.showValidationProgress('Initializing API system...');
+            
             // Wait for API config to initialize (including api-key.txt loading)
             if (window.apiConfig && window.apiConfig.initPromise) {
                 await window.apiConfig.initPromise;
@@ -226,10 +276,49 @@ class VisualNovelGame {
             
             // Update debug info
             this.updateDebugInfo();
+            
+            // Hide validation progress
+            this.hideValidationProgress();
+            
         } catch (error) {
             console.error('LLM system initialization failed:', error);
+            this.hideValidationProgress();
             throw error;
         }
+    }
+
+    /**
+     * Show validation progress to user
+     */
+    showValidationProgress(message) {
+        this.elements.dialogueText.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #6c757d;">
+                <div style="font-size: 20px; margin-bottom: 15px;">🔍</div>
+                <div style="font-weight: bold; margin-bottom: 10px;">Validating API Configuration</div>
+                <div style="font-size: 14px;">${message}</div>
+                <div style="margin-top: 20px;">
+                    <div style="width: 200px; height: 4px; background-color: #e9ecef; border-radius: 2px; margin: 0 auto; overflow: hidden;">
+                        <div style="width: 100%; height: 100%; background-color: #007bff; border-radius: 2px; animation: progress-slide 2s ease-in-out infinite;"></div>
+                    </div>
+                </div>
+            </div>
+            <style>
+                @keyframes progress-slide {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
+            </style>
+        `;
+        this.elements.progressIndicator.textContent = 'Validating...';
+        this.elements.progressIndicator.style.color = '#007bff';
+    }
+
+    /**
+     * Hide validation progress
+     */
+    hideValidationProgress() {
+        // Clear the validation progress display
+        this.elements.dialogueText.innerHTML = '';
     }
     
     /**
@@ -570,7 +659,7 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
             return;
         }
         
-        // Generate dynamic question using LLM (required)
+        // Generate dynamic question using LLM with fallback support
         try {
             const prompt = await this.generateDynamicQuestion();
             this.elements.inputLabel.textContent = prompt;
@@ -580,12 +669,20 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
             this.elements.textInput.focus();
         } catch (error) {
             console.error('Dynamic question generation failed:', error);
-            throw new Error('Cannot generate question: API is required but not available');
+            
+            // Show user-friendly error message but allow continuation
+            console.log('🔄 Continuing with fallback conversation flow...');
+            const fallbackPrompt = this.generateFallbackQuestion(this.state.currentStep);
+            this.elements.inputLabel.textContent = fallbackPrompt;
+            this.elements.textInput.value = '';
+            this.elements.textInput.placeholder = 'Type your response here...';
+            this.elements.textInputContainer.classList.remove('hidden');
+            this.elements.textInput.focus();
         }
     }
     
     /**
-     * Generate dynamic, contextual questions using LLM (required)
+     * Generate dynamic, contextual questions using LLM with fallback support
      */
     async generateDynamicQuestion() {
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
@@ -638,8 +735,38 @@ Respond with just the question, no additional text.`;
             return response.content.trim();
         } catch (error) {
             console.error('Failed to generate dynamic question:', error);
-            throw error;
+            
+            // Fallback to predefined questions when API calls fail
+            console.log('🔄 Using fallback questions due to API connectivity issues...');
+            return this.generateFallbackQuestion(factCount);
         }
+    }
+
+    /**
+     * Generate fallback questions when API is unavailable
+     */
+    generateFallbackQuestion(factCount) {
+        const fallbackQuestions = [
+            // First question - open-ended
+            [
+                "Tell me about yourself! What's something interesting you'd like to share?",
+                "I'd love to get to know you better. What's something you're passionate about?",
+                "What's been the highlight of your day so far?",
+                "What's something that makes you happy?",
+                "Tell me about something you really enjoy doing."
+            ],
+            // Follow-up questions
+            [
+                "That's fascinating! What else would you like me to know about you?",
+                "I love hearing about that! What's another aspect of your life you'd like to share?",
+                "That sounds wonderful! Tell me about something else that's meaningful to you.",
+                "That's really interesting! What else makes you who you are?",
+                "I can tell that's important to you! What's something else you'd like me to know?"
+            ]
+        ];
+        
+        const questionSet = factCount === 0 ? fallbackQuestions[0] : fallbackQuestions[1];
+        return questionSet[Math.floor(Math.random() * questionSet.length)];
     }
     
     async handleTextSubmit() {
@@ -669,28 +796,36 @@ Respond with just the question, no additional text.`;
                 }, 1000);
             } catch (error) {
                 console.error('Error generating response:', error);
-                // No fallback - throw error to block application
-                throw new Error('Cannot generate response: API is required but not available');
+                // Continue with a generic response instead of blocking
+                console.log('🔄 Continuing with generic acknowledgment...');
+                await this.displayMessage("Thank you for sharing that with me!");
+                this.state.currentStep++;
+                
+                setTimeout(() => {
+                    this.collectNextFact();
+                }, 1000);
             }
         }, this.getTypingDelay());
     }
     
     async generateFactResponse(factType, value) {
-        // Use LLM (required)
+        // Use LLM with fallback support
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            throw new Error('API is required but not available');
+            console.log('🔄 Using fallback response due to API unavailability...');
+            return this.generateFallbackResponse(value);
         }
         
         try {
             return await this.generateDynamicResponse(value);
         } catch (error) {
             console.error('LLM request failed:', error);
-            throw error;
+            console.log('🔄 Falling back to predefined responses due to API error...');
+            return this.generateFallbackResponse(value);
         }
     }
     
     /**
-     * Generate dynamic response to user input using LLM (required)
+     * Generate dynamic response to user input using LLM with fallback support
      */
     async generateDynamicResponse(userInput) {
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
@@ -728,8 +863,55 @@ Keep it conversational and authentic. Be brief but warm.`;
             return response.content.trim();
         } catch (error) {
             console.error('Failed to generate dynamic response:', error);
-            throw error;
+            
+            // Fallback to predefined responses when API calls fail
+            console.log('🔄 Using fallback responses due to API connectivity issues...');
+            return this.generateFallbackResponse(userInput);
         }
+    }
+
+    /**
+     * Generate fallback responses when API is unavailable
+     */
+    generateFallbackResponse(userInput) {
+        const input = userInput.toLowerCase();
+        let responses = [];
+        
+        // Try to categorize response based on content
+        if (input.includes('love') || input.includes('passion') || input.includes('enjoy')) {
+            responses = [
+                "That's wonderful! I can tell you're really passionate about that.",
+                "That sounds amazing! It's great when you find something you truly love.",
+                "How exciting! I love hearing about what brings people joy.",
+                "That's fantastic! Your enthusiasm really comes through."
+            ];
+        } else if (input.includes('work') || input.includes('job') || input.includes('career')) {
+            responses = [
+                "That sounds like interesting work!",
+                "Your job must be quite engaging!",
+                "That's a meaningful profession!",
+                "It sounds like you have a fulfilling career."
+            ];
+        } else if (input.includes('family') || input.includes('friend') || input.includes('people')) {
+            responses = [
+                "It sounds like you have wonderful people in your life!",
+                "That's lovely! Relationships are so important.",
+                "What a blessing to have such great people around you!",
+                "It's clear that your relationships mean a lot to you."
+            ];
+        } else {
+            // General positive responses
+            responses = [
+                "That's really interesting! Thanks for sharing that with me.",
+                "I'm glad you told me about that! I love learning about people.",
+                "That sounds wonderful! I appreciate you opening up.",
+                "That's great to know! You seem like a fascinating person.",
+                "How lovely! Thanks for letting me get to know you better.",
+                "That's fantastic! I enjoy hearing about what makes you unique."
+            ];
+        }
+        
+        return responses[Math.floor(Math.random() * responses.length)];
     }
     
     /**
