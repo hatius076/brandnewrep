@@ -1000,17 +1000,39 @@ Respond with just the question, no additional text.`;
     }
     
     /**
-     * Generate rigid acknowledgment that always returns the same format
+     * Generic API placeholder for generating acknowledgments
+     * Simulates an AI acknowledgment API call
+     */
+    async callAIAcknowledgmentAPI(factType, input) {
+        // Simulate API call delay and potential failure
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 1000 + 500));
+        
+        // Simulate random API failures (20% chance)
+        if (Math.random() < 0.2) {
+            throw new Error('API service unavailable');
+        }
+        
+        // Simulate successful API response
+        return `Thank you for sharing that ${factType}! I appreciate you telling me about ${input}.`;
+    }
+
+    /**
+     * Always call AI API to generate acknowledgment, no fallback logic
      */
     async generateNaturalAcknowledgment(factType, input) {
-        return `Acknowledged: ${factType} = ${input}`;
+        try {
+            return await this.callAIAcknowledgmentAPI(factType, input);
+        } catch (error) {
+            console.error('API call failed:', error);
+            return 'API unavailable. Unable to generate acknowledgment.';
+        }
     }
     
     /**
-     * Get rigid fallback acknowledgments - same format as main function
+     * Fallback function modified to return same API error message
      */
     getNaturalFallbackAcknowledgment(factType, input) {
-        return `Acknowledged: ${factType} = ${input}`;
+        return 'API unavailable. Unable to generate acknowledgment.';
     }
     
     /**
