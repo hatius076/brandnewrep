@@ -252,14 +252,14 @@ function parseQuizGeneration(response) {
     const questionMatch = content.match(/Question:\s*(.*?)(?=\n[A-D]\)|$)/s);
     const question = questionMatch ? questionMatch[1].trim() : '';
     
-    // Extract options
-    const optionMatches = content.match(/([A-D])\)\s*(.*?)(?=\n[A-D]\)|$)/gs);
+    // Extract options more carefully to avoid including "Correct:" text
+    const optionMatches = content.match(/([A-D])\)\s*(.*?)(?=\n(?:[A-D]\)|Correct:)|$)/gs);
     const options = {};
     const optionsList = [];
     
     if (optionMatches) {
         optionMatches.forEach(match => {
-            const optionMatch = match.match(/([A-D])\)\s*(.*)/s);
+            const optionMatch = match.match(/([A-D])\)\s*(.*?)$/s);
             if (optionMatch) {
                 const letter = optionMatch[1];
                 const text = optionMatch[2].trim();
