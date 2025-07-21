@@ -282,15 +282,15 @@ class VisualNovelGame {
     updateApiKeySourceDisplay() {
         const source = window.apiConfig.getApiKeySource();
         
-        if (source === 'env' && window.apiConfig.isOnline) {
+        if (source === 'txt' && window.apiConfig.isOnline) {
             this.elements.apiKeySource.textContent = '✅ API key loaded and validated from api-key.txt file';
-            this.elements.apiKeySource.className = 'setting-info env success';
-        } else if (source === 'env' && !window.apiConfig.isOnline) {
+            this.elements.apiKeySource.className = 'setting-info txt success';
+        } else if (source === 'txt' && !window.apiConfig.isOnline) {
             this.elements.apiKeySource.textContent = '❌ API key from api-key.txt file is invalid';
-            this.elements.apiKeySource.className = 'setting-info env error';
+            this.elements.apiKeySource.className = 'setting-info txt error';
         } else {
             this.elements.apiKeySource.textContent = '❌ api-key.txt file is required but API key is missing or empty';
-            this.elements.apiKeySource.className = 'setting-info env error';
+            this.elements.apiKeySource.className = 'setting-info txt error';
         }
     }
     
