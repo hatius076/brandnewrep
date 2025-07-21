@@ -56,25 +56,25 @@ Users interact with one randomly assigned character through a structured convers
 
 2. **Configure API Access**:
    
-   **API Key Setup**:
-   - Create an `api-key.txt` file in the project root
-   - Add your OpenAI API key directly to this file (no formatting needed)
-   - The application will automatically load it on startup
+   **Direct Key Entry in config/api-key-config.js**:
+   - Open `config/api-key-config.js` in any text editor
+   - Find the `OPENAI_API_KEY` variable in the file
+   - Replace `'YOUR_API_KEY_HERE'` with your actual OpenAI API key
+   - Save the file and refresh your browser
    
-   **Settings UI (Limited)**:
+   **Settings UI (View Only)**:
    - Open the application in your browser
    - Click the **⚙️ Settings** button in the header
-   - API key entry is disabled - managed through api-key.txt file
    - View API key status and validation results
    - Select your preferred model (GPT-4 recommended)
-   - Settings are limited when using api-key.txt file
+   - API key entry is managed through config/api-key-config.js only
    
-   **API Key Management**: api-key.txt file is the only supported method.
+   **Why Direct Entry?**: This eliminates CORS issues that browsers have with local file access, ensuring reliable API key loading across all browsers and environments.
 
 3. **Security Notice**: 
-   - ⚠️ API key is stored in api-key.txt file and sent directly to OpenAI (client-side only)
-   - Manual API key entry is disabled for security
-   - api-key.txt file method provides better security and deployment control
+   - ⚠️ API key is stored directly in config/api-key-config.js and sent to OpenAI (client-side only)
+   - This method is recommended for development, testing, and research purposes
+   - Direct key entry eliminates browser CORS restrictions with local files
    - Never share your API key or use on untrusted devices
    - Consider using a separate API key for research purposes
 
@@ -106,7 +106,7 @@ Users interact with one randomly assigned character through a structured convers
 ├── script.js           # Enhanced game engine with LLM integration
 ├── config/
 │   ├── flags.js         # Configuration and randomization
-│   ├── env-loader.js    # 🆕 API key loader for api-key.txt support
+│   ├── api-key-config.js # 🆕 Direct API key configuration  
 │   └── api.js           # 🆕 LLM API client and management
 ├── prompts/
 │   ├── templates.js    # 🆕 LLM prompt templates and parsing

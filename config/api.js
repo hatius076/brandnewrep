@@ -21,41 +21,31 @@ class APIConfig {
     }
 
     /**
-     * Initialize API configuration - requires api-key.txt file with valid API key as hard requirement
+     * Initialize API configuration - reads API key directly from script.js variable
      */
     async initialize() {
         console.log('🚀 Initializing API configuration...');
         
         try {
-            // Always require api-key.txt file to exist
-            if (!window.envLoader) {
-                throw new Error('API key loader not available - this indicates a system configuration error');
-            }
+            // Read API key directly from the global variable set in script.js
+            console.log('🔑 Reading API key from script.js...');
+            const apiKey = window.OPENAI_API_KEY;
             
-            console.log('📂 Loading api-key.txt file...');
-            const keyFileLoaded = await window.envLoader.loadEnvFile();
-            if (!keyFileLoaded) {
-                throw new Error('api-key.txt file is required but could not be loaded. Please create an api-key.txt file with a valid OpenAI API key.');
-            }
-            
-            // api-key.txt file exists, API key is now a hard requirement
-            console.log('🔑 Extracting API key from file...');
-            const apiKey = window.envLoader.get('OPENAI_API_KEY');
-            if (!apiKey || !apiKey.trim()) {
-                throw new Error('API key is required in api-key.txt file but is missing or empty. Please add your OpenAI API key to the file.');
+            if (!apiKey || apiKey === 'YOUR_API_KEY_HERE' || !apiKey.trim()) {
+                throw new Error('API key is required but not configured. Please edit config/api-key-config.js and set your OpenAI API key in the OPENAI_API_KEY variable.');
             }
             
             this.apiKey = apiKey.trim();
-            this.apiKeySource = 'txt';
-            console.log('✅ API key loaded from api-key.txt file');
+            this.apiKeySource = 'script';
+            console.log('✅ API key loaded from script.js');
             console.log(`🔒 API key preview: ${this.getMaskedApiKey()}`);
             
-            // Validate the key from api-key.txt - this is mandatory
+            // Validate the API key
             console.log('🔍 Validating API key...');
             this.isOnline = await this.validateApiKey();
             if (!this.isOnline) {
                 // Provide more specific error based on validation failure
-                let errorMessage = 'API key from api-key.txt file failed validation. ';
+                let errorMessage = 'API key from script.js failed validation. ';
                 
                 if (this.apiKey.startsWith('sk-test')) {
                     errorMessage += 'Test keys are accepted for demonstration, but validation failed unexpectedly.';
@@ -78,8 +68,8 @@ class APIConfig {
             this.isOnline = false;
             
             // Add more context to the error
-            if (error.message.includes('api-key.txt')) {
-                error.message += '\n\n💡 To fix this:\n1. Create an api-key.txt file in the root directory\n2. Add your OpenAI API key to the file\n3. Ensure the key starts with "sk-"\n4. Refresh the page';
+            if (error.message.includes('not configured')) {
+                error.message += '\n\n💡 To fix this:\n1. Open config/api-key-config.js in a text editor\n2. Find the OPENAI_API_KEY variable\n3. Replace \'YOUR_API_KEY_HERE\' with your actual API key\n4. Ensure the key starts with "sk-"\n5. Save the file and refresh the page';
             }
             
             throw error;
@@ -401,7 +391,7 @@ class APIConfig {
     getMaskedApiKey() {
         if (!this.apiKey) return 'Not configured';
         const masked = `sk-...${this.apiKey.slice(-4)}`;
-        const source = this.apiKeySource ? ` (from ${this.apiKeySource === 'txt' ? 'api-key.txt file' : 'localStorage'})` : '';
+        const source = this.apiKeySource ? ` (from ${this.apiKeySource === 'script' ? 'config/api-key-config.js' : 'localStorage'})` : '';
         return masked + source;
     }
 
@@ -413,24 +403,24 @@ class APIConfig {
     }
 
     /**
-     * Check if api-key.txt file is required (always true in strict mode)
+     * Check if config/api-key-config.js configuration is expected (always true in direct key mode)
      */
     isEnvExpected() {
-        return true; // Always require api-key.txt file
+        return true; // Always require config/api-key-config.js configuration
     }
 
     /**
-     * Check if api-key.txt API key is required (always true in strict mode)
+     * Check if config/api-key-config.js API key is required (always true in direct key mode)
      */
     isEnvRequired() {
-        return true; // Always require api-key.txt file
+        return true; // Always require config/api-key-config.js configuration
     }
 
     /**
-     * Clear all configuration - DISABLED when api-key.txt is required
+     * Clear all configuration - DISABLED when config/api-key-config.js configuration is required
      */
     clearConfig() {
-        throw new Error('Configuration clearing is disabled. API key must be managed via api-key.txt file.');
+        throw new Error('Configuration clearing is disabled. API key must be managed via config/api-key-config.js.');
     }
 }
 
@@ -513,7 +503,7 @@ class FallbackResponseSystem {
      */
     generateResponse(phase, context = {}) {
         if (this.disabled) {
-            throw new Error('Fallback response system is disabled - valid api-key.txt API key is required');
+            throw new Error('Fallback response system is disabled - valid API key in config/api-key-config.js is required');
         }
         
         const parsed = {
@@ -570,7 +560,7 @@ class FallbackResponseSystem {
      */
     generateFallbackQuestion(factNumber = 0, previousUserResponse = null) {
         if (this.disabled) {
-            throw new Error('Fallback response system is disabled - valid api-key.txt API key is required');
+            throw new Error('Fallback response system is disabled - valid API key in config/api-key-config.js is required');
         }
         
         if (factNumber === 0) {
@@ -587,7 +577,7 @@ class FallbackResponseSystem {
      */
     generateContextualResponse(userInput, factNumber = 0) {
         if (this.disabled) {
-            throw new Error('Fallback response system is disabled - valid api-key.txt API key is required');
+            throw new Error('Fallback response system is disabled - valid API key in config/api-key-config.js is required');
         }
         
         // Different response types based on what the user shared
@@ -648,9 +638,9 @@ class FallbackResponseSystem {
 window.apiConfig = new APIConfig();
 window.fallbackSystem = new FallbackResponseSystem();
 
-// Always disable fallback system in strict api-key.txt mode
+// Always disable fallback system in script.js mode
 window.fallbackSystem.disable();
-console.log('Fallback system permanently disabled - valid api-key.txt API key is required');
+console.log('Fallback system permanently disabled - valid API key in config/api-key-config.js is required');
 
 // Initialize system and handle errors by blocking application
 window.apiConfig.initPromise.then(() => {

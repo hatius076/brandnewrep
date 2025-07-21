@@ -148,40 +148,23 @@ class VisualNovelGame {
         let errorType = 'Configuration Error';
         let additionalHelp = '';
         
-        if (errorMessage.includes('api-key.txt file is required')) {
-            errorType = 'Quick Setup Required';
+        if (errorMessage.includes('not configured')) {
+            errorType = 'API Key Setup Required';
             additionalHelp = `
                 <div style="background-color: #e7f3ff; border: 1px solid #b8daff; border-radius: 4px; padding: 15px; margin: 15px 0;">
-                    <h4 style="margin-top: 0; color: #004085;">🚀 Welcome! Let's get you set up in 4 easy steps:</h4>
+                    <h4 style="margin-top: 0; color: #004085;">🚀 Welcome! Let's get you set up in 3 easy steps:</h4>
                     <ol style="margin-bottom: 0; line-height: 1.6;">
-                        <li><strong>Create the file:</strong> Make a new file named <code>api-key.txt</code> in the same folder as this application</li>
-                        <li><strong>Open the file:</strong> Use any text editor (Notepad, VS Code, etc.)</li>
-                        <li><strong>Add your API key:</strong> Paste your OpenAI API key (starts with <code>sk-</code>) and save</li>
-                        <li><strong>Refresh:</strong> Come back here and click the retry button below</li>
+                        <li><strong>Get your API key:</strong> Visit <a href="https://platform.openai.com/api-keys" target="_blank" style="color: #004085;">OpenAI's API keys page</a> and create/copy your API key</li>
+                        <li><strong>Edit api-key-config.js:</strong> Open the config/api-key-config.js file and find the <code>OPENAI_API_KEY</code> variable</li>
+                        <li><strong>Add your key:</strong> Replace <code>'YOUR_API_KEY_HERE'</code> with your actual API key (starts with <code>sk-</code>) and save</li>
                     </ol>
                     <div style="background-color: #fff; border-radius: 4px; padding: 10px; margin-top: 10px; border-left: 4px solid #007bff;">
-                        <small>💡 <strong>Why do I need this?</strong> This app uses OpenAI's AI to create personalized conversations. The API key allows secure access to these AI services.</small>
-                    </div>
-                </div>
-            `;
-        } else if (errorMessage.includes('missing or empty')) {
-            errorType = 'API Key Needed';
-            additionalHelp = `
-                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin: 15px 0;">
-                    <h4 style="margin-top: 0; color: #856404;">📝 Almost there! Your api-key.txt file is ready, but it needs content</h4>
-                    <div style="line-height: 1.6;">
-                        <p style="margin-bottom: 10px;">Your file exists but is empty. Here's what to do:</p>
-                        <ol style="margin-bottom: 10px;">
-                            <li>Open your <code>api-key.txt</code> file</li>
-                            <li>Paste your OpenAI API key (should look like: <code>sk-abc123...</code>)</li>
-                            <li>Save the file and come back here</li>
-                        </ol>
-                        <small>🔍 <strong>API Key Format:</strong> Should start with "sk-" and be about 50 characters long</small>
+                        <small>💡 <strong>Why direct entry?</strong> This eliminates CORS issues that occur with .txt files and ensures reliable API key loading in all browsers.</small>
                     </div>
                 </div>
             `;
         } else if (errorMessage.includes('failed validation')) {
-            errorType = 'Connection Issue';
+            errorType = 'API Key Validation Failed';
             additionalHelp = `
                 <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; margin: 15px 0;">
                     <h4 style="margin-top: 0; color: #721c24;">🔍 Your API key couldn't be verified</h4>
@@ -190,7 +173,7 @@ class VisualNovelGame {
                         <li><strong>Invalid or expired key:</strong> Double-check your API key from OpenAI</li>
                         <li><strong>Internet connection:</strong> Make sure you're connected to the internet</li>
                         <li><strong>OpenAI service:</strong> Their API might be temporarily down</li>
-                        <li><strong>Browser restrictions:</strong> Some browsers block API validation requests</li>
+                        <li><strong>Incorrect format:</strong> Make sure the key starts with "sk-" and is complete</li>
                     </ul>
                     <div style="background-color: #fff; border-radius: 4px; padding: 10px; border-left: 4px solid #dc3545;">
                         <small>💡 <strong>Quick fix:</strong> Try refreshing the page first. If that doesn't work, verify your API key at <a href="https://platform.openai.com/api-keys" target="_blank" style="color: #721c24;">platform.openai.com</a></small>
@@ -207,13 +190,13 @@ class VisualNovelGame {
                 <hr style="border-color: #dee2e6; margin: 20px 0;">
                 <h4 style="color: #495057; margin-bottom: 15px;">🛠️ Troubleshooting Tips:</h4>
                 <ul style="margin-bottom: 15px; line-height: 1.6;">
-                    <li><strong>File location:</strong> Make sure <code>api-key.txt</code> is in the same folder as <code>index.html</code></li>
+                    <li><strong>File location:</strong> Make sure you're editing <code>config/api-key-config.js</code> in the config folder</li>
                     <li><strong>Key format:</strong> API key should start with "sk-" and be about 50 characters long</li>
-                    <li><strong>Internet connection:</strong> Verify you're connected to the internet</li>
+                    <li><strong>Save the file:</strong> Make sure to save api-key-config.js after making changes</li>
                     <li><strong>Browser console:</strong> Check for any additional error messages (press F12)</li>
                 </ul>
                 <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px; margin-top: 15px;">
-                    <strong>🔄 Ready to try again?</strong> After making changes, click the "Retry Validation" button below or refresh this page.
+                    <strong>🔄 Ready to try again?</strong> After editing api-key-config.js with your API key, refresh this page to retry.
                 </div>
                 <details style="margin-top: 15px;">
                     <summary style="cursor: pointer; color: #6c757d; font-size: 14px;">
@@ -229,7 +212,7 @@ class VisualNovelGame {
         // Hide settings button and show reload option
         this.elements.settingsButton.style.display = 'none';
         this.elements.restartButton.classList.remove('hidden');
-        this.elements.restartButton.textContent = '🔄 Retry Validation';
+        this.elements.restartButton.textContent = '🔄 Retry After Setup';
         
         // Update progress indicator with more user-friendly status
         this.elements.progressIndicator.textContent = errorType;
@@ -263,24 +246,24 @@ class VisualNovelGame {
     }
     
     /**
-     * Initialize LLM system and validate api-key.txt API key (blocking operation)
+     * Initialize LLM system and validate API key (blocking operation)
      */
     async initializeLLMSystem() {
         try {
             // Show validation progress to user
             this.showValidationProgress('Initializing API system...');
             
-            // Wait for API config to initialize (including api-key.txt loading)
+            // Wait for API config to initialize (reading from script.js)
             if (window.apiConfig && window.apiConfig.initPromise) {
                 await window.apiConfig.initPromise;
             }
             
-            // api-key.txt file and valid API key are mandatory
+            // Valid API key is mandatory
             if (!window.apiConfig.isConfigured() || !window.apiConfig.isOnline) {
-                throw new Error('Valid OpenAI API key is required in api-key.txt file. Application cannot start without proper configuration.');
+                throw new Error('Valid OpenAI API key is required in script.js. Application cannot start without proper configuration.');
             }
             
-            console.log('✅ api-key.txt API key validated successfully');
+            console.log('✅ API key validated successfully');
             
             // Ensure fallback system is disabled
             if (!window.fallbackSystem.isDisabled()) {
@@ -340,7 +323,7 @@ class VisualNovelGame {
     }
     
     /**
-     * Load LLM UI settings and configure interface for api-key.txt-only mode
+     * Load LLM UI settings and configure interface for script.js-based API key
      */
     loadLLMSettings() {
         try {
@@ -357,16 +340,15 @@ class VisualNovelGame {
             console.warn('Failed to load LLM UI settings:', error);
         }
         
-        // Always disable manual API key input in strict api-key.txt mode
+        // Show api-key-config.js key status (masked)
         this.elements.apiKeyInput.disabled = true;
-        this.elements.apiKeyInput.placeholder = 'API key managed by api-key.txt file';
+        this.elements.apiKeyInput.placeholder = 'API key managed in config/api-key-config.js';
         this.elements.testApiButton.disabled = true;
         
-        // Show api-key.txt key status (masked)
         if (window.apiConfig.isConfigured()) {
             this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey().split(' (')[0];
         } else {
-            this.elements.apiKeyInput.value = 'Not configured in api-key.txt';
+            this.elements.apiKeyInput.value = 'Not configured in config/api-key-config.js';
         }
         
         this.updateApiStatus();
@@ -384,20 +366,20 @@ class VisualNovelGame {
     }
     
     /**
-     * Update API key source display for api-key.txt-only mode
+     * Update API key source display for script.js-based configuration
      */
     updateApiKeySourceDisplay() {
         const source = window.apiConfig.getApiKeySource();
         
-        if (source === 'txt' && window.apiConfig.isOnline) {
-            this.elements.apiKeySource.textContent = '✅ API key loaded and validated from api-key.txt file';
-            this.elements.apiKeySource.className = 'setting-info txt success';
-        } else if (source === 'txt' && !window.apiConfig.isOnline) {
-            this.elements.apiKeySource.textContent = '❌ API key from api-key.txt file is invalid';
-            this.elements.apiKeySource.className = 'setting-info txt error';
+        if (source === 'script' && window.apiConfig.isOnline) {
+            this.elements.apiKeySource.textContent = '✅ API key loaded and validated from config/api-key-config.js';
+            this.elements.apiKeySource.className = 'setting-info script success';
+        } else if (source === 'script' && !window.apiConfig.isOnline) {
+            this.elements.apiKeySource.textContent = '❌ API key from config/api-key-config.js is invalid';
+            this.elements.apiKeySource.className = 'setting-info script error';
         } else {
-            this.elements.apiKeySource.textContent = '❌ api-key.txt file is required but API key is missing or empty';
-            this.elements.apiKeySource.className = 'setting-info txt error';
+            this.elements.apiKeySource.textContent = '❌ API key is required in config/api-key-config.js but is missing or not configured';
+            this.elements.apiKeySource.className = 'setting-info script error';
         }
     }
     
@@ -409,14 +391,14 @@ class VisualNovelGame {
     }
     
     /**
-     * Test API connection - DISABLED in api-key.txt-only mode
+     * Test API connection - DISABLED in script.js-based mode
      */
     async testApiConnection() {
-        alert('API testing is disabled. API key is managed through api-key.txt file and validated automatically.');
+        alert('API testing is disabled. API key is managed in config/api-key-config.js and validated automatically when the application starts.');
     }
     
     /**
-     * Save settings - LIMITED in api-key.txt-only mode
+     * Save settings - LIMITED in script.js-based mode
      */
     saveSettings() {
         const debugMode = this.elements.debugModeCheckbox.checked;
@@ -443,10 +425,10 @@ class VisualNovelGame {
     }
     
     /**
-     * Clear all settings - DISABLED in api-key.txt-only mode
+     * Clear all settings - DISABLED in script.js-based mode
      */
     clearSettings() {
-        alert('Settings clearing is disabled. API key is managed through api-key.txt file.');
+        alert('Settings clearing is disabled. API key is managed in config/api-key-config.js.');
     }
     
     /**
@@ -463,10 +445,10 @@ class VisualNovelGame {
     }
     
     /**
-     * Toggle offline mode - DISABLED in api-key.txt-only mode
+     * Toggle offline mode - DISABLED in script.js-based mode
      */
     toggleOfflineMode() {
-        // Offline mode is disabled in api-key.txt-only mode
+        // Offline mode is disabled in config/api-key-config.js-based mode
         this.elements.offlineModeCheckbox.checked = false;
         this.state.llmEnabled = window.apiConfig.isOnline;
         this.updateApiStatus();
@@ -639,7 +621,7 @@ class VisualNovelGame {
         // For demonstration with test keys, use a simulated response
         if (window.apiConfig.apiKey && window.apiConfig.apiKey.startsWith('sk-test')) {
             console.log('Using simulated LLM response for demo purposes');
-            return "Hello! I'm an AI assistant powered by the API key from your api-key.txt file. I'm excited to have a personalized conversation with you today!";
+            return "Hello! I'm an AI assistant powered by the API key from your config/api-key-config.js file. I'm excited to have a personalized conversation with you today!";
         }
         
         const systemPrompt = `You are a warm, engaging AI assistant starting a conversation with someone new. Be genuine, friendly, and natural.`;
