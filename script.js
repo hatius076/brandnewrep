@@ -27,7 +27,11 @@ class VisualNovelGame {
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
-        this.initializeLLMSystem();
+        this.initializeGame();
+    }
+
+    async initializeGame() {
+        await this.initializeLLMSystem();
         this.startGame();
     }
     
@@ -159,12 +163,12 @@ class VisualNovelGame {
     /**
      * Initialize LLM system and load settings
      */
-    initializeLLMSystem() {
-        // Check if API is configured
-        this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
+    async initializeLLMSystem() {
+        // Load saved settings first (this will initialize API config)
+        await this.loadLLMSettings();
         
-        // Load saved settings
-        this.loadLLMSettings();
+        // Check if API is configured after initialization
+        this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
         
         // Update debug info
         this.updateDebugInfo();
@@ -173,7 +177,7 @@ class VisualNovelGame {
     /**
      * Load LLM settings from storage and update UI
      */
-    loadLLMSettings() {
+    async loadLLMSettings() {
         try {
             const saved = localStorage.getItem('llm_ui_settings');
             if (saved) {
@@ -186,13 +190,41 @@ class VisualNovelGame {
             console.warn('Failed to load LLM UI settings:', error);
         }
         
-        // Update UI with current API config
-        if (window.apiConfig.isConfigured()) {
-            this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey();
-            this.elements.modelSelect.value = window.apiConfig.model;
-        }
+        // Ensure API config is initialized
+        await window.apiConfig.ensureInitialized();
         
+        // Update UI with current API config
+        this.updateApiConfigUI();
         this.updateApiStatus();
+    }
+
+    /**
+     * Update API configuration display in UI
+     */
+    updateApiConfigUI() {
+        if (window.apiConfig.isConfigured()) {
+            const source = window.apiConfig.getApiKeySource();
+            
+            if (source === 'env') {
+                // Show that key is loaded from .env and disable input
+                this.elements.apiKeyInput.value = 'Loaded from .env file';
+                this.elements.apiKeyInput.disabled = true;
+                this.elements.apiKeyInput.style.fontStyle = 'italic';
+                this.elements.apiKeyInput.style.color = '#666';
+            } else {
+                // Show masked key for localStorage and enable input
+                this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey();
+                this.elements.apiKeyInput.disabled = false;
+                this.elements.apiKeyInput.style.fontStyle = 'normal';
+                this.elements.apiKeyInput.style.color = '';
+            }
+            
+            this.elements.modelSelect.value = window.apiConfig.model;
+        } else {
+            this.elements.apiKeyInput.disabled = false;
+            this.elements.apiKeyInput.style.fontStyle = 'normal';
+            this.elements.apiKeyInput.style.color = '';
+        }
     }
     
     /**
@@ -200,6 +232,7 @@ class VisualNovelGame {
      */
     openSettingsModal() {
         this.elements.settingsModal.classList.remove('hidden');
+        this.updateApiConfigUI();
         this.updateApiStatus();
         this.updateUsageStats();
     }
@@ -215,7 +248,14 @@ class VisualNovelGame {
      * Test API connection
      */
     async testApiConnection() {
-        const apiKey = this.elements.apiKeyInput.value.trim();
+        // If key is loaded from .env, use that; otherwise use input
+        let apiKey;
+        if (window.apiConfig.getApiKeySource() === 'env') {
+            apiKey = window.apiConfig.apiKey;
+        } else {
+            apiKey = this.elements.apiKeyInput.value.trim();
+        }
+        
         if (!apiKey) {
             alert('Please enter an API key first.');
             return;
@@ -248,15 +288,18 @@ class VisualNovelGame {
      * Save settings
      */
     saveSettings() {
-        const apiKey = this.elements.apiKeyInput.value.trim();
         const model = this.elements.modelSelect.value;
         const debugMode = this.elements.debugModeCheckbox.checked;
         const offlineMode = this.elements.offlineModeCheckbox.checked;
         
-        // Save API config
-        if (apiKey && !apiKey.includes('...')) {
-            window.apiConfig.setApiKey(apiKey);
+        // Save API config only if it's not from .env and has a valid key
+        if (window.apiConfig.getApiKeySource() !== 'env') {
+            const apiKey = this.elements.apiKeyInput.value.trim();
+            if (apiKey && !apiKey.includes('...') && !apiKey.includes('Loaded from')) {
+                window.apiConfig.setApiKey(apiKey);
+            }
         }
+        
         window.apiConfig.model = model;
         window.apiConfig.saveConfig();
         
@@ -288,7 +331,11 @@ class VisualNovelGame {
             window.apiConfig.clearConfig();
             localStorage.removeItem('llm_ui_settings');
             
+            // Reset UI to default state
             this.elements.apiKeyInput.value = '';
+            this.elements.apiKeyInput.disabled = false;
+            this.elements.apiKeyInput.style.fontStyle = 'normal';
+            this.elements.apiKeyInput.style.color = '';
             this.elements.modelSelect.value = 'gpt-4';
             this.elements.debugModeCheckbox.checked = false;
             this.elements.offlineModeCheckbox.checked = false;
@@ -351,10 +398,14 @@ class VisualNovelGame {
             status = 'Offline mode';
             className = 'offline';
         } else if (window.apiConfig.isOnline) {
-            status = 'Online';
+            const source = window.apiConfig.getApiKeySource();
+            const sourceText = source === 'env' ? ' (.env)' : ' (manual)';
+            status = 'Online' + sourceText;
             className = 'online';
         } else if (window.apiConfig.isConfigured()) {
-            status = 'Configured but offline';
+            const source = window.apiConfig.getApiKeySource();
+            const sourceText = source === 'env' ? ' (.env)' : ' (manual)';
+            status = 'Configured but offline' + sourceText;
             className = 'offline';
         }
         

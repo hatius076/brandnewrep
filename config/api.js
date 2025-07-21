@@ -6,6 +6,7 @@
 class APIConfig {
     constructor() {
         this.apiKey = null;
+        this.apiKeySource = null; // 'env' or 'localStorage'
         this.model = 'gpt-4';
         this.maxTokens = 500;
         this.temperature = 0.7;
@@ -15,18 +16,108 @@ class APIConfig {
         this.requestCount = 0;
         this.estimatedCost = 0;
         
-        this.loadStoredConfig();
+        // Load configuration asynchronously after construction
+        this.initialized = false;
+        this.initPromise = this.loadStoredConfig();
     }
 
     /**
-     * Load configuration from localStorage
+     * Ensure configuration is loaded before using
      */
-    loadStoredConfig() {
+    async ensureInitialized() {
+        if (!this.initialized) {
+            await this.initPromise;
+            this.initialized = true;
+        }
+    }
+
+    /**
+     * Load API key from .env file
+     */
+    async loadFromEnvFile() {
+        try {
+            const response = await fetch('.env');
+            if (!response.ok) {
+                console.info('No .env file found or accessible');
+                return null;
+            }
+            
+            const envContent = await response.text();
+            const envVars = this.parseEnvFile(envContent);
+            
+            if (envVars.OPENAI_API_KEY && envVars.OPENAI_API_KEY.trim()) {
+                return envVars.OPENAI_API_KEY.trim();
+            }
+            
+            return null;
+        } catch (error) {
+            console.info('Could not load .env file:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Parse .env file content into key-value pairs
+     */
+    parseEnvFile(content) {
+        const envVars = {};
+        const lines = content.split('\n');
+        
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            
+            // Skip empty lines and comments
+            if (!trimmedLine || trimmedLine.startsWith('#')) {
+                continue;
+            }
+            
+            // Parse KEY=VALUE format
+            const equalIndex = trimmedLine.indexOf('=');
+            if (equalIndex > 0) {
+                const key = trimmedLine.substring(0, equalIndex).trim();
+                let value = trimmedLine.substring(equalIndex + 1).trim();
+                
+                // Remove surrounding quotes if present
+                if ((value.startsWith('"') && value.endsWith('"')) ||
+                    (value.startsWith("'") && value.endsWith("'"))) {
+                    value = value.slice(1, -1);
+                }
+                
+                envVars[key] = value;
+            }
+        }
+        
+        return envVars;
+    }
+
+    /**
+     * Load configuration from .env file first, then localStorage
+     */
+    async loadStoredConfig() {
+        // First try to load from .env file
+        const envApiKey = await this.loadFromEnvFile();
+        if (envApiKey) {
+            this.apiKey = envApiKey;
+            this.apiKeySource = 'env';
+            console.info('API key loaded from .env file');
+        } else {
+            // Fall back to localStorage
+            this.loadFromLocalStorage();
+        }
+    }
+
+    /**
+     * Load configuration from localStorage (fallback method)
+     */
+    loadFromLocalStorage() {
         try {
             const stored = localStorage.getItem('llm_config');
             if (stored) {
                 const config = JSON.parse(stored);
-                this.apiKey = config.apiKey;
+                if (config.apiKey) {
+                    this.apiKey = config.apiKey;
+                    this.apiKeySource = 'localStorage';
+                }
                 this.model = config.model || 'gpt-4';
                 this.temperature = config.temperature || 0.7;
                 this.maxTokens = config.maxTokens || 500;
@@ -58,6 +149,7 @@ class APIConfig {
      */
     async setApiKey(key) {
         this.apiKey = key?.trim();
+        this.apiKeySource = 'localStorage'; // Manual entry goes to localStorage
         if (this.apiKey) {
             this.isOnline = await this.validateApiKey();
         } else {
@@ -114,6 +206,8 @@ class APIConfig {
      * Make LLM API request
      */
     async makeRequest(systemPrompt, userPrompt, options = {}) {
+        await this.ensureInitialized();
+        
         if (!this.isOnline || !this.apiKey) {
             throw new Error('API not configured or offline');
         }
@@ -224,10 +318,27 @@ class APIConfig {
     }
 
     /**
+     * Get the source of the current API key
+     */
+    getApiKeySource() {
+        return this.apiKeySource || 'unknown';
+    }
+
+    /**
+     * Get formatted display of API key with source
+     */
+    getApiKeyDisplay() {
+        if (!this.apiKey) return 'Not configured';
+        const source = this.apiKeySource === 'env' ? '(.env file)' : '(manual entry)';
+        return `${this.getMaskedApiKey()} ${source}`;
+    }
+
+    /**
      * Clear all configuration
      */
     clearConfig() {
         this.apiKey = null;
+        this.apiKeySource = null;
         this.isOnline = false;
         this.resetUsageStats();
         localStorage.removeItem('llm_config');
