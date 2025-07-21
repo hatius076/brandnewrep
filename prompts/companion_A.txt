@@ -1,0 +1,22 @@
+# Character A - Perfect Memory Profile
+
+## Characteristics:
+- Perfect recall (100% accuracy)
+- Maintains consistent personality
+- Artificial latency added for parity (300-600ms)
+- Helpful and engaging tone
+
+## Memory System:
+- Retains all collected facts accurately
+- Never makes recall errors during quiz
+- References facts correctly in outro
+
+## Response Patterns:
+- Consistent response length (≤20 tokens)
+- Natural conversation flow
+- Appropriate emotional responses
+
+## Experimental Controls:
+- Blinded to player (character type not revealed)
+- Randomized assignment per session
+- Identical interface and interaction patterns

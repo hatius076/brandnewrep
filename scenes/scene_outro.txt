@@ -1,0 +1,24 @@
+# Outro Scene Template
+
+This scene handles the goodbye and rating collection.
+
+## Flow:
+1. Personalized goodbye referencing remembered facts
+2. Two 7-point Likert scale ratings:
+   - Perceived human-likeness
+   - Desirability to interact again
+
+## Personalization:
+- References specific facts from conversation
+- Character A: Accurate fact references
+- Character B: May reference incorrectly remembered facts
+
+## Data Collection:
+- Complete session data export
+- JSON format with all interactions
+- Downloadable research data file
+
+## Session Completion:
+- Session duration tracking
+- Restart functionality
+- Research-appropriate closure
