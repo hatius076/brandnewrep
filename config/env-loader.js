@@ -99,6 +99,13 @@ class EnvLoader {
     isLoaded() {
         return this.loadSuccessful;
     }
+
+    /**
+     * Check if load was attempted (regardless of success)
+     */
+    wasLoadAttempted() {
+        return this.loadAttempted;
+    }
 }
 
 // Global instance

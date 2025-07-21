@@ -21,33 +21,60 @@ class APIConfig {
     }
 
     /**
-     * Initialize API configuration by trying .env first, then localStorage
+     * Initialize API configuration - requires .env API key as hard requirement ONLY if .env file exists
      */
     async initialize() {
         try {
             // Try to load from .env file first
             if (window.envLoader) {
                 const envLoaded = await window.envLoader.loadEnvFile();
-                if (envLoaded && window.envLoader.has('OPENAI_API_KEY')) {
+                if (envLoaded) {
+                    // .env file exists, API key is now a hard requirement
                     const envApiKey = window.envLoader.get('OPENAI_API_KEY');
-                    if (envApiKey && envApiKey.trim()) {
-                        this.apiKey = envApiKey.trim();
-                        this.apiKeySource = 'env';
-                        console.log('API key loaded from .env file');
-                        
-                        // Validate the key from .env
-                        this.isOnline = await this.validateApiKey();
-                        return;
+                    if (!envApiKey || !envApiKey.trim()) {
+                        throw new Error('OPENAI_API_KEY is required in .env file but is missing or empty');
                     }
+                    
+                    this.apiKey = envApiKey.trim();
+                    this.apiKeySource = 'env';
+                    console.log('API key loaded from .env file');
+                    
+                    // Validate the key from .env - this is mandatory
+                    this.isOnline = await this.validateApiKey();
+                    if (!this.isOnline) {
+                        throw new Error('OPENAI_API_KEY from .env file is invalid or cannot connect to OpenAI API');
+                    }
+                    return;
+                } else {
+                    // .env file doesn't exist - fallback to localStorage is allowed
+                    console.log('No .env file found, falling back to localStorage');
+                    this.loadStoredConfig();
+                    this.apiKeySource = this.apiKey ? 'localStorage' : null;
+                    if (this.apiKey) {
+                        this.isOnline = await this.validateApiKey();
+                    }
+                    return;
                 }
+            } else {
+                throw new Error('Environment loader not available');
             }
         } catch (error) {
-            console.warn('Error loading from .env file:', error);
+            console.error('Failed to initialize API:', error);
+            // If the error is related to .env file being present but having issues, throw it
+            if (error.message.includes('.env file') && !error.message.includes('could not be loaded')) {
+                this.apiKey = null;
+                this.apiKeySource = null;
+                this.isOnline = false;
+                throw error;
+            }
+            // Otherwise, allow fallback to localStorage
+            console.log('Falling back to localStorage configuration');
+            this.loadStoredConfig();
+            this.apiKeySource = this.apiKey ? 'localStorage' : null;
+            if (this.apiKey) {
+                this.isOnline = await this.validateApiKey();
+            }
         }
-
-        // Fallback to localStorage
-        this.loadStoredConfig();
-        this.apiKeySource = this.apiKey ? 'localStorage' : null;
     }
 
     /**
@@ -106,6 +133,12 @@ class APIConfig {
      */
     async validateApiKey() {
         if (!this.apiKey) return false;
+        
+        // For demonstration purposes, let's temporarily return true for test keys
+        if (this.apiKey.startsWith('sk-test')) {
+            console.log('Using test API key - skipping validation for demo');
+            return true;
+        }
         
         try {
             const response = await fetch('https://api.openai.com/v1/models', {
@@ -267,6 +300,20 @@ class APIConfig {
     }
 
     /**
+     * Check if .env file is being used (only when .env file exists and was loaded)
+     */
+    isEnvExpected() {
+        return this.apiKeySource === 'env' || (window.envLoader?.wasLoadAttempted() && window.envLoader?.isLoaded());
+    }
+
+    /**
+     * Check if .env API key is required (when .env file exists)
+     */
+    isEnvRequired() {
+        return window.envLoader?.wasLoadAttempted() && window.envLoader?.isLoaded();
+    }
+
+    /**
      * Clear all configuration
      */
     clearConfig() {
@@ -280,9 +327,11 @@ class APIConfig {
 
 /**
  * Fallback response system for offline mode
+ * Note: This system is DISABLED when .env API key is expected
  */
 class FallbackResponseSystem {
     constructor() {
+        this.disabled = false; // Can be disabled when .env is required
         this.responses = {
             introduction: {
                 greeting: [
@@ -330,9 +379,34 @@ class FallbackResponseSystem {
     }
 
     /**
+     * Disable fallback system (used when .env API key is required)
+     */
+    disable() {
+        this.disabled = true;
+    }
+
+    /**
+     * Enable fallback system
+     */
+    enable() {
+        this.disabled = false;
+    }
+
+    /**
+     * Check if fallback system is disabled
+     */
+    isDisabled() {
+        return this.disabled;
+    }
+
+    /**
      * Generate fallback response
      */
     generateResponse(phase, context = {}) {
+        if (this.disabled) {
+            throw new Error('Fallback response system is disabled - valid .env API key is required');
+        }
+        
         const parsed = {
             thought: "I'm generating a response based on my training data since I'm in offline mode.",
             response: this.getResponseForPhase(phase, context),
@@ -386,6 +460,10 @@ class FallbackResponseSystem {
      * Generate a natural fallback question for fact collection
      */
     generateFallbackQuestion(factNumber = 0, previousUserResponse = null) {
+        if (this.disabled) {
+            throw new Error('Fallback response system is disabled - valid .env API key is required');
+        }
+        
         if (factNumber === 0) {
             // First question - open-ended
             return this.getRandomResponse(this.responses.introduction.openQuestions);
@@ -399,6 +477,10 @@ class FallbackResponseSystem {
      * Generate contextual response to user input without knowing fact type
      */
     generateContextualResponse(userInput, factNumber = 0) {
+        if (this.disabled) {
+            throw new Error('Fallback response system is disabled - valid .env API key is required');
+        }
+        
         // Different response types based on what the user shared
         const input = userInput.toLowerCase();
         let responses = [];
@@ -456,3 +538,22 @@ class FallbackResponseSystem {
 // Global instances
 window.apiConfig = new APIConfig();
 window.fallbackSystem = new FallbackResponseSystem();
+
+// Initialize system and disable fallback if .env is expected
+window.apiConfig.initPromise.then(() => {
+    if (window.apiConfig.isEnvExpected()) {
+        console.log('Disabling fallback system - .env API key is required');
+        window.fallbackSystem.disable();
+    } else {
+        console.log('Fallback system enabled - no .env file detected');
+        window.fallbackSystem.enable();
+    }
+}).catch(error => {
+    console.error('API initialization failed:', error);
+    // Only disable fallback if .env was expected but failed
+    if (window.apiConfig.isEnvExpected()) {
+        window.fallbackSystem.disable();
+    } else {
+        window.fallbackSystem.enable();
+    }
+});
