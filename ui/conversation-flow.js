@@ -133,21 +133,22 @@ class ConversationFlowController {
             // Generate dynamic response using Warden AI and LLM
             const context = this.buildCurrentContext();
             
-            if (this.game.state.llmEnabled && window.apiConfig.isOnline) {
-                return await this.game.generateLLMResponse(
-                    this.game.state.phase, 
-                    { 
-                        ...context, 
-                        ...data 
-                    }
-                );
-            } else {
-                // Fallback response
-                return window.fallbackSystem.generateResponse(
-                    this.game.state.phase, 
-                    context
-                ).response;
+            try {
+    if (this.game.state.llmEnabled) {
+        return await this.game.generateLLMResponse(
+            this.game.state.phase, 
+            { 
+                ...context, 
+                ...data 
             }
+        );
+    } else {
+        throw new Error('LLM disabled in settings');
+    }
+} catch (error) {
+    console.error('API call failed, cannot generate response:', error);
+    throw new Error('Unable to generate response - API unavailable and fallback system disabled');
+}
         } catch (error) {
             console.error('Failed to generate agent response:', error);
             throw error;
