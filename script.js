@@ -1000,54 +1000,17 @@ Respond with just the question, no additional text.`;
     }
     
     /**
-     * Generate natural acknowledgments for each fact type
+     * Generate rigid acknowledgment that always returns the same format
      */
     async generateNaturalAcknowledgment(factType, input) {
-        const acknowledgments = {
-            name: [
-                `Nice to meet you, ${input}! What a lovely name.`,
-                `${input} - I'll remember that! Great to meet you.`,
-                `Hi ${input}! Thanks for introducing yourself.`
-            ],
-            favFood: [
-                `${input}? That sounds delicious! I can see why that's your favorite.`,
-                `Mmm, ${input}! You have great taste.`,
-                `Oh, ${input}! That's a wonderful choice.`
-            ],
-            favHobby: [
-                `${input} sounds like such an engaging hobby! I love that.`,
-                `How cool! ${input} must be really fulfilling.`,
-                `That's awesome! ${input} is such a great way to spend time.`
-            ],
-            hobbyFact: [
-                `That's fascinating! Thanks for sharing that detail about your hobby.`,
-                `Wow, that's really interesting! I love learning unique things like that.`,
-                `That's such a cool fact! It really shows your passion.`
-            ],
-            profession: [
-                `${input} - that sounds like meaningful work!`,
-                `How interesting! Being a ${input} must be quite rewarding.`,
-                `That's great! ${input} is such an important role.`
-            ],
-            bonusFact: input.toLowerCase().includes('nothing') ? [
-                `No worries at all! Sometimes it's nice to keep some things private.`,
-                `That's perfectly fine! You've already shared so much with me.`
-            ] : [
-                `That's such a fun fact! Thanks for sharing that with me.`,
-                `How interesting! I love learning these personal details.`,
-                `That's really cool! What a great thing to know about you.`
-            ]
-        };
-        
-        const options = acknowledgments[factType] || [`Thanks for sharing that about ${factType}!`];
-        return options[Math.floor(Math.random() * options.length)];
+        return `Acknowledged: ${factType} = ${input}`;
     }
     
     /**
-     * Get natural fallback acknowledgments
+     * Get rigid fallback acknowledgments - same format as main function
      */
     getNaturalFallbackAcknowledgment(factType, input) {
-        return this.generateNaturalAcknowledgment(factType, input); // Use same method as fallback
+        return `Acknowledged: ${factType} = ${input}`;
     }
     
     /**
