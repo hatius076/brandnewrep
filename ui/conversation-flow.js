@@ -133,22 +133,27 @@ class ConversationFlowController {
             // Generate dynamic response using Warden AI and LLM
             const context = this.buildCurrentContext();
             
-            try {
-    if (this.game.state.llmEnabled) {
-        return await this.game.generateLLMResponse(
-            this.game.state.phase, 
-            { 
-                ...context, 
-                ...data 
+            // API is required - no fallback logic allowed
+            if (!this.game.state.llmEnabled) {
+                const error = new Error('API unavailable: LLM is disabled in settings');
+                console.error('API unavailable:', error.message);
+                throw error;
             }
-        );
-    } else {
-        throw new Error('LLM disabled in settings');
-    }
-} catch (error) {
-    console.error('API call failed, cannot generate response:', error);
-    throw new Error('Unable to generate response - API unavailable and fallback system disabled');
-}
+
+            console.log('🌐 Making API request for agent response...');
+            try {
+                return await this.game.generateLLMResponse(
+                    this.game.state.phase, 
+                    { 
+                        ...context, 
+                        ...data 
+                    }
+                );
+            } catch (error) {
+                const apiError = new Error(`API unavailable: ${error.message}`);
+                console.error('❌ API call failed:', apiError.message);
+                throw apiError;
+            }
         } catch (error) {
             console.error('Failed to generate agent response:', error);
             throw error;
@@ -416,24 +421,25 @@ class ConversationFlowController {
     }
 
     /**
-     * Handle agent timeout
+     * Handle agent timeout - always show API unavailable message
      */
     handleAgentTimeout() {
-        console.error('Agent response timeout');
+        console.error('❌ Agent response timeout - API unavailable');
         
-        // Show fallback message
-        this.displayAgentMessage("I apologize, I seem to be having trouble responding. Let's continue!");
+        // Show clear API unavailable message
+        this.displayAgentMessage("API unavailable: Request timed out. Please check your connection and try again.");
         this.completeAgentTurn();
     }
 
     /**
-     * Handle agent error
+     * Handle agent error - always show API unavailable message
      */
     handleAgentError(error) {
-        console.error('Agent error:', error);
+        console.error('❌ Agent error - API unavailable:', error.message);
         
-        // Show error recovery message
-        this.displayAgentMessage("I had a brief moment of confusion there. What were we talking about?");
+        // Show clear API unavailable message
+        const errorMessage = `API unavailable: ${error.message}. Please check your connection and API configuration.`;
+        this.displayAgentMessage(errorMessage);
         this.completeAgentTurn();
     }
 

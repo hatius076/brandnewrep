@@ -277,7 +277,7 @@ class VisualNovelGame {
                     bonusFact: "Tell me something interesting about yourself!"
                 }
             },
-            quiz: this.generateQuizQuestions(),
+            quiz: [], // Quiz system redesigned - no longer uses static questions
             outro: this.getOutroMessage(),
             ratings: [
                 "How human-like did this AI assistant seem to you?",
@@ -305,11 +305,6 @@ class VisualNovelGame {
             }
             
             console.log('✅ API key validated successfully');
-            
-            // Ensure fallback system is disabled
-            if (!window.fallbackSystem.isDisabled()) {
-                window.fallbackSystem.disable();
-            }
             
             this.state.llmEnabled = true;
             
@@ -621,13 +616,17 @@ class VisualNovelGame {
      * Update debug information
      */
     updateDebugInfo() {
-        this.elements.debugCharacter.textContent = 
-            `Character ${this.state.characterType} (${this.state.characterType === 'A' ? 'Perfect Memory' : 'Impaired Memory'})`;
+        if (this.elements.debugCharacter) {
+            this.elements.debugCharacter.textContent = 
+                `Character ${this.state.characterType} (${this.state.characterType === 'A' ? 'Perfect Memory' : 'Impaired Memory'})`;
+        }
         
-        this.elements.debugMemory.textContent = 
-            `Errors: ${this.state.memoryErrors}/${GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS}`;
+        if (this.elements.debugMemory) {
+            this.elements.debugMemory.textContent = 
+                `Errors: ${this.state.memoryErrors}/${GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS}`;
+        }
             
-        if (this.state.lastLLMThought) {
+        if (this.state.lastLLMThought && this.elements.debugThought) {
             this.elements.debugThought.textContent = this.state.lastLLMThought;
         }
     }
@@ -639,25 +638,6 @@ class VisualNovelGame {
             "Welcome! I'm an AI assistant, and I find that conversations are much more engaging when I know something about the person I'm talking with. Would you mind sharing some details about yourself?"
         ];
         return greetings[Math.floor(Math.random() * greetings.length)];
-    }
-    
-    generateQuizQuestions() {
-        const questionTemplates = [
-            "What did you tell me your name was?",
-            "You mentioned your favorite food earlier - what was it?", 
-            "What hobby did you say you enjoy most?",
-            "What was that interesting detail you shared about your hobby?",
-            "What did you say you do for work or study?"
-        ];
-        
-        const factKeys = ['name', 'favFood', 'favHobby', 'hobbyFact', 'profession'];
-        
-        return questionTemplates.map((template, index) => ({
-            question: template,
-            factKey: factKeys[index],
-            correctAnswer: null, // Will be set based on player input
-            options: [] // Will be generated with distractors
-        }));
     }
     
     getOutroMessage() {
@@ -962,41 +942,11 @@ Respond with just the question, no additional text.`;
             
             return response.content.trim();
         } catch (error) {
-            console.error('Failed to generate dynamic question:', error);
-            
-            // Fallback to predefined questions when API calls fail
-            console.log('🔄 Using fallback questions due to API connectivity issues...');
-            return this.generateFallbackQuestion(factCount);
+            console.error('❌ Failed to generate dynamic question - API unavailable:', error.message);
+            throw new Error(`API unavailable: ${error.message}`);
         }
     }
 
-    /**
-     * Generate fallback questions when API is unavailable
-     */
-    generateFallbackQuestion(factCount) {
-        const fallbackQuestions = [
-            // First question - open-ended
-            [
-                "Tell me about yourself! What's something interesting you'd like to share?",
-                "I'd love to get to know you better. What's something you're passionate about?",
-                "What's been the highlight of your day so far?",
-                "What's something that makes you happy?",
-                "Tell me about something you really enjoy doing."
-            ],
-            // Follow-up questions
-            [
-                "That's fascinating! What else would you like me to know about you?",
-                "I love hearing about that! What's another aspect of your life you'd like to share?",
-                "That sounds wonderful! Tell me about something else that's meaningful to you.",
-                "That's really interesting! What else makes you who you are?",
-                "I can tell that's important to you! What's something else you'd like me to know?"
-            ]
-        ];
-        
-        const questionSet = factCount === 0 ? fallbackQuestions[0] : fallbackQuestions[1];
-        return questionSet[Math.floor(Math.random() * questionSet.length)];
-    }
-    
     async handleTextSubmit() {
         const input = this.elements.textInput.value.trim();
         if (!input) return;
@@ -1253,22 +1203,23 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startQuiz() {
         try {
-            // API is required but provide fallback when network fails
+            // API is required - no fallback logic allowed
             if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-                console.log('🔄 Using fallback quiz intro due to API unavailability...');
-                const fallbackIntro = "Now I'd like to test my memory of what you've shared with me. Let's see how well I remember!";
-                await this.displayMessage(fallbackIntro);
-            } else {
-                const quizIntro = await this.generateLLMResponse('quiz', { 
-                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-                });
-                await this.displayMessage(quizIntro);
+                const error = new Error('API unavailable: LLM is disabled or API is offline');
+                console.error('❌ Quiz cannot start:', error.message);
+                await this.displayMessage(`API unavailable: ${error.message}. Please check your connection and API configuration.`);
+                return;
             }
+
+            console.log('🌐 Generating quiz intro via API...');
+            const quizIntro = await this.generateLLMResponse('quiz', { 
+                customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+            });
+            await this.displayMessage(quizIntro);
         } catch (error) {
-            console.error('Error generating quiz intro:', error);
-            console.log('🔄 Using fallback quiz intro due to API error...');
-            const fallbackIntro = "Now I'd like to test my memory of what you've shared with me. Let's see how well I remember!";
-            await this.displayMessage(fallbackIntro);
+            console.error('❌ Error generating quiz intro - API unavailable:', error.message);
+            await this.displayMessage(`API unavailable: ${error.message}. Please check your connection and API configuration.`);
+            return;
         }
         
         // Generate quiz questions with options
@@ -1279,45 +1230,29 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
     
     prepareQuizQuestions() {
-        const questions = this.dialogueData.quiz;
+        // New quiz approach: Ask "What should I ask the agent about myself?"
+        // Generate randomized fact type options
+        const factTypes = [
+            { key: 'name', label: 'Your name', description: 'What did you tell me your name was?' },
+            { key: 'profession', label: 'Your occupation/work', description: 'What do you do for work or study?' },
+            { key: 'favFood', label: 'Your favorite food', description: 'What food do you enjoy eating?' },
+            { key: 'favHobby', label: 'Your hobby/interests', description: 'What activities do you enjoy?' },
+            { key: 'relaxPlace', label: 'Where you relax', description: 'Where do you go to unwind or feel peaceful?' },
+            { key: 'bonusFact', label: 'Something interesting about you', description: 'What interesting detail did you share?' }
+        ];
+
+        // Filter to only include fact types that the user actually provided
+        const availableFactTypes = factTypes.filter(ft => 
+            this.state.playerFacts[ft.key] && 
+            this.state.playerFacts[ft.key].trim()
+        );
+
+        // Shuffle the available fact types
+        this.availableFactTypes = this.shuffleArray(availableFactTypes);
+        this.currentQuizStep = 0;
         
-        // Set correct answers based on player facts
-        questions.forEach(q => {
-            q.correctAnswer = this.state.playerFacts[q.factKey];
-            q.options = this.generateQuizOptions(q.correctAnswer, q.factKey);
-        });
-        
-        this.quizQuestions = questions;
-    }
-    
-    generateQuizOptions(correctAnswer, factType) {
-        // Generate plausible distractors
-        const distractors = this.getDistractors(factType);
-        const options = [correctAnswer];
-        
-        // Add 2-3 distractors
-        while (options.length < 4 && distractors.length > 0) {
-            const distractor = distractors.splice(Math.floor(Math.random() * distractors.length), 1)[0];
-            if (distractor !== correctAnswer) {
-                options.push(distractor);
-            }
-        }
-        
-        // Shuffle options
-        return this.shuffleArray(options);
-    }
-    
-    getDistractors(factType) {
-        const distractorSets = {
-            name: ['Alex', 'Jordan', 'Taylor', 'Casey', 'Riley', 'Morgan'],
-            favFood: ['Pizza', 'Sushi', 'Tacos', 'Pasta', 'Burgers', 'Ice cream'],
-            favHobby: ['Reading', 'Gaming', 'Cooking', 'Hiking', 'Music', 'Photography'],
-            hobbyFact: ['I do it every day', 'I\'ve been doing it for years', 'It\'s very relaxing', 'I learned it online'],
-            profession: ['Teacher', 'Engineer', 'Artist', 'Writer', 'Doctor', 'Student'],
-            bonusFact: ['I love traveling', 'I have two cats', 'I speak three languages', 'I play guitar']
-        };
-        
-        return [...(distractorSets[factType] || [])];
+        console.log(`📝 Quiz prepared with ${this.availableFactTypes.length} fact types:`, 
+                   this.availableFactTypes.map(ft => ft.label));
     }
     
     shuffleArray(array) {
@@ -1330,96 +1265,131 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
     
     showNextQuizQuestion() {
-        if (this.state.currentStep >= this.quizQuestions.length) {
+        if (this.currentQuizStep >= this.availableFactTypes.length) {
             // Quiz complete
             this.enterPhase('rating');
             return;
         }
-        
-        const question = this.quizQuestions[this.state.currentStep];
-        const shouldMakeError = this.shouldMakeMemoryError();
-        
-        this.elements.quizQuestion.textContent = question.question;
+
+        // Show the new quiz question format
+        this.elements.quizQuestion.textContent = "What should I ask the agent about myself?";
         this.elements.quizOptions.innerHTML = '';
+
+        // Create randomized options from available fact types
+        const currentBatch = this.getRandomizedQuizOptions();
         
-        let selectedAnswer = question.correctAnswer;
-        
-        // Character B (memory impaired) may select wrong answer
-        if (shouldMakeError) {
-            const wrongOptions = question.options.filter(opt => opt !== question.correctAnswer);
-            if (wrongOptions.length > 0) {
-                selectedAnswer = wrongOptions[Math.floor(Math.random() * wrongOptions.length)];
-                this.state.memoryErrors++;
-                this.logEvent('memory_error', {
-                    question: question.question,
-                    correct: question.correctAnswer,
-                    selected: selectedAnswer,
-                    step: this.state.currentStep
-                });
-            }
-        }
-        
-        // Create option buttons
-        question.options.forEach(option => {
+        currentBatch.forEach((option, index) => {
             const button = document.createElement('button');
             button.className = 'quiz-option';
-            button.textContent = option;
-            button.addEventListener('click', () => this.selectQuizOption(button, option, question));
+            button.textContent = option.label;
+            button.dataset.factKey = option.key;
+            button.dataset.optionIndex = index;
+            
+            button.addEventListener('click', () => {
+                this.handleQuizSelection(option);
+            });
+            
             this.elements.quizOptions.appendChild(button);
         });
-        
+
         this.elements.quizContainer.classList.remove('hidden');
-        
-        // Auto-select answer after a delay (simulating AI thinking)
-        setTimeout(() => {
-            const targetButton = Array.from(this.elements.quizOptions.children)
-                .find(btn => btn.textContent === selectedAnswer);
-            if (targetButton) {
-                this.selectQuizOption(targetButton, selectedAnswer, question);
-            }
-        }, this.getTypingDelay());
+        console.log(`📋 Showing quiz step ${this.currentQuizStep + 1}/${this.availableFactTypes.length}`);
     }
     
+    getRandomizedQuizOptions() {
+        // Get the current correct option (the fact type we want them to select)
+        const correctOption = this.availableFactTypes[this.currentQuizStep];
+        
+        // Get 3 other random fact types as distractors (or fewer if not enough facts)
+        const otherOptions = this.availableFactTypes
+            .filter((_, index) => index !== this.currentQuizStep)
+            .slice(0, 3);
+        
+        // Combine and shuffle options
+        const allOptions = [correctOption, ...otherOptions];
+        return this.shuffleArray(allOptions);
+    }
+
+    async handleQuizSelection(selectedOption) {
+        const correctOption = this.availableFactTypes[this.currentQuizStep];
+        const isCorrect = selectedOption.key === correctOption.key;
+        
+        console.log(`🎯 Quiz selection: ${selectedOption.label} (${isCorrect ? 'correct' : 'incorrect'})`);
+        
+        // Log the quiz answer
+        this.state.quizAnswers.push({
+            step: this.currentQuizStep,
+            question: "What should I ask the agent about myself?",
+            correctFactType: correctOption.key,
+            selectedFactType: selectedOption.key,
+            isCorrect: isCorrect,
+            timestamp: Date.now()
+        });
+
+        // Hide quiz options temporarily
+        this.elements.quizContainer.classList.add('hidden');
+
+        try {
+            // Generate agent response based on what the user selected
+            const agentResponse = await this.generateQuizResponse(selectedOption, correctOption, isCorrect);
+            await this.displayMessage(agentResponse);
+        } catch (error) {
+            console.error('❌ Error generating quiz response - API unavailable:', error.message);
+            await this.displayMessage(`API unavailable: ${error.message}. Please check your connection and API configuration.`);
+            return;
+        }
+
+        // Move to next quiz question
+        this.currentQuizStep++;
+        setTimeout(() => {
+            this.showNextQuizQuestion();
+        }, 2000);
+    }
+
+    async generateQuizResponse(selectedOption, correctOption, isCorrect) {
+        // Build the context for the agent response
+        const userFact = this.state.playerFacts[selectedOption.key];
+        const shouldMakeMemoryError = this.shouldMakeMemoryError();
+        
+        let systemPrompt, userPrompt;
+
+        if (isCorrect) {
+            // User selected the right fact type to ask about
+            systemPrompt = `You are an AI assistant being tested on your memory. The user just asked you to recall information about their ${selectedOption.label}.`;
+            
+            if (shouldMakeMemoryError && this.state.characterType === 'B') {
+                // Character B may make memory errors
+                userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
+                
+However, you are Character B with impaired memory. You should make a subtle memory error - get the general idea right but change a detail. Be natural about it, don't acknowledge the error.
+
+Respond as if recalling: "Let me think... you told me [your slightly incorrect memory]."`;
+            } else {
+                // Perfect recall
+                userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
+
+Respond naturally as if recalling this information accurately: "Let me think... you told me [accurate memory]."`;
+            }
+        } else {
+            // User selected wrong fact type - redirect naturally
+            systemPrompt = `You are an AI assistant being tested on your memory. The user asked about the wrong topic.`;
+            userPrompt = `The user asked you to recall their ${selectedOption.label}, but you actually learned about their ${correctOption.label}: "${this.state.playerFacts[correctOption.key]}"
+
+Respond naturally, redirecting to what you actually remember: "Actually, I think you're thinking of something else. What I remember you telling me was about your ${correctOption.label}..."`;
+        }
+
+        const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+            maxTokens: 150,
+            temperature: 0.7
+        });
+
+        return response.content.trim();
+    }
+
     shouldMakeMemoryError() {
         if (this.state.characterType === 'A') return false; // Perfect memory
         if (this.state.memoryErrors >= GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS) return false;
         return Math.random() > GAME_CONFIG.MEMORY_ACCURACY.IMPAIRED;
-    }
-    
-    selectQuizOption(button, answer, question) {
-        // Clear previous selections
-        Array.from(this.elements.quizOptions.children).forEach(btn => {
-            btn.classList.remove('selected');
-        });
-        
-        // Select current option
-        button.classList.add('selected');
-        
-        // Record answer
-        this.state.quizAnswers.push({
-            question: question.question,
-            correct: question.correctAnswer,
-            selected: answer,
-            isCorrect: answer === question.correctAnswer
-        });
-        
-        this.logEvent('quiz_answer', {
-            question: question.question,
-            correct: question.correctAnswer,
-            selected: answer,
-            isCorrect: answer === question.correctAnswer,
-            step: this.state.currentStep
-        });
-        
-        // Continue to next question after delay
-        setTimeout(() => {
-            this.elements.quizContainer.classList.add('hidden');
-            this.state.currentStep++;
-            
-            setTimeout(() => {
-                this.showNextQuizQuestion();
-            }, 1000);
-        }, 2000);
     }
     
     async startRating() {
