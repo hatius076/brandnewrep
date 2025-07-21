@@ -70,7 +70,6 @@ class VisualNovelGame {
             settingsButton: document.getElementById('settings-button'),
             settingsModal: document.getElementById('settings-modal'),
             closeSettings: document.getElementById('close-settings'),
-            apiKeyInput: document.getElementById('api-key-input'),
             modelSelect: document.getElementById('model-select'),
             debugModeCheckbox: document.getElementById('debug-mode'),
             statusIndicator: document.getElementById('status-indicator'),
@@ -180,6 +179,7 @@ class VisualNovelGame {
             } else {
                 console.log('Using stored API key');
                 this.state.llmEnabled = true;
+                this.loadLLMSettings(); // Load UI settings
                 this.updateDebugInfo();
                 this.startGame();
             }
@@ -199,6 +199,7 @@ class VisualNovelGame {
             if (isValid) {
                 console.log('API key validated and stored');
                 this.state.llmEnabled = true;
+                this.loadLLMSettings(); // Load UI settings
                 this.updateDebugInfo();
                 this.startGame();
             } else {
@@ -253,7 +254,6 @@ class VisualNovelGame {
         
         // Update UI with current API config
         if (window.apiConfig.isConfigured()) {
-            this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey();
             this.elements.modelSelect.value = window.apiConfig.model;
         }
         
@@ -280,9 +280,9 @@ class VisualNovelGame {
      * Test API connection
      */
     async testApiConnection() {
-        const apiKey = this.elements.apiKeyInput.value.trim();
-        if (!apiKey) {
-            alert('Please enter an API key first.');
+        // Since we no longer have API key input in settings, test the stored key
+        if (!window.apiConfig.keyManager.hasKey()) {
+            alert('No API key stored. The system will prompt for one when needed.');
             return;
         }
         
@@ -291,14 +291,14 @@ class VisualNovelGame {
         this.elements.testApiButton.disabled = true;
         
         try {
-            const isValid = await window.apiConfig.setApiKey(apiKey);
+            const isValid = await window.apiConfig.testStoredKey();
             this.state.llmEnabled = isValid;
             this.updateApiStatus();
             
             if (isValid) {
                 alert('API connection successful!');
             } else {
-                alert('API connection failed. Please check your API key.');
+                alert('API connection failed. Please clear the stored key and restart to enter a new one.');
             }
         } catch (error) {
             console.error('API test failed:', error);
@@ -313,14 +313,10 @@ class VisualNovelGame {
      * Save settings
      */
     saveSettings() {
-        const apiKey = this.elements.apiKeyInput.value.trim();
         const model = this.elements.modelSelect.value;
         const debugMode = this.elements.debugModeCheckbox.checked;
         
-        // Save API config
-        if (apiKey && !apiKey.includes('...')) {
-            window.apiConfig.setApiKey(apiKey);
-        }
+        // Save API config (no API key input in settings anymore)
         window.apiConfig.model = model;
         window.apiConfig.saveConfig();
         
@@ -352,7 +348,6 @@ class VisualNovelGame {
             window.apiConfig.clearConfig();
             localStorage.removeItem('llm_ui_settings');
             
-            this.elements.apiKeyInput.value = '';
             this.elements.modelSelect.value = 'gpt-4';
             this.elements.debugModeCheckbox.checked = false;
             
