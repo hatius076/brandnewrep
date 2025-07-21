@@ -24,13 +24,12 @@ class ConversationEngine {
 
     async initialize() {
         // Load API key from environment
-        // For client-side applications, environment variables aren't directly accessible
-        // This will work in build environments like Vite or when running with a server
+        // For client-side applications, we check for window.env which can be set by build tools
         this.apiKey = (typeof process !== 'undefined' && process.env?.OPENAI_API_KEY) || 
                       (typeof window !== 'undefined' && window.env?.OPENAI_API_KEY) ||
                       null;
         
-        if (!this.apiKey) {
+        if (!this.apiKey || this.apiKey === 'sk-your-api-key-here') {
             this.displayError('No API key found. Please create a .env file with OPENAI_API_KEY=your_key_here');
             return;
         }
