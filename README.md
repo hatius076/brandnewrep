@@ -56,25 +56,25 @@ Users interact with one randomly assigned character through a structured convers
 
 2. **Configure API Access**:
    
-   **Option 1: .env File (Recommended for deployment)**:
-   - Edit the `.env` file in the project root
-   - Set `OPENAI_API_KEY=your-api-key-here`
+   **API Key Setup**:
+   - Create an `api-key.txt` file in the project root
+   - Add your OpenAI API key directly to this file (no formatting needed)
    - The application will automatically load it on startup
    
-   **Option 2: Settings UI**:
+   **Settings UI (Limited)**:
    - Open the application in your browser
    - Click the **⚙️ Settings** button in the header
-   - Enter your OpenAI API key in the provided field
+   - API key entry is disabled - managed through api-key.txt file
+   - View API key status and validation results
    - Select your preferred model (GPT-4 recommended)
-   - Click **Test API** to verify connection
-   - Click **Save Settings**
+   - Settings are limited when using api-key.txt file
    
-   **Precedence**: .env file takes priority over localStorage settings.
+   **API Key Management**: api-key.txt file is the only supported method.
 
 3. **Security Notice**: 
-   - ⚠️ API keys can be loaded from .env file or stored locally in browser
-   - Keys are sent directly to OpenAI (client-side only)
-   - .env file method is preferred for deployment and security
+   - ⚠️ API key is stored in api-key.txt file and sent directly to OpenAI (client-side only)
+   - Manual API key entry is disabled for security
+   - api-key.txt file method provides better security and deployment control
    - Never share your API key or use on untrusted devices
    - Consider using a separate API key for research purposes
 
@@ -106,7 +106,7 @@ Users interact with one randomly assigned character through a structured convers
 ├── script.js           # Enhanced game engine with LLM integration
 ├── config/
 │   ├── flags.js         # Configuration and randomization
-│   ├── env-loader.js    # 🆕 Environment variable loader for .env support
+│   ├── env-loader.js    # 🆕 API key loader for api-key.txt support
 │   └── api.js           # 🆕 LLM API client and management
 ├── prompts/
 │   ├── templates.js    # 🆕 LLM prompt templates and parsing

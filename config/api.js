@@ -21,37 +21,37 @@ class APIConfig {
     }
 
     /**
-     * Initialize API configuration - requires .env file with valid API key as hard requirement
+     * Initialize API configuration - requires api-key.txt file with valid API key as hard requirement
      */
     async initialize() {
         try {
-            // Always require .env file to exist
+            // Always require api-key.txt file to exist
             if (!window.envLoader) {
-                throw new Error('Environment loader not available');
+                throw new Error('API key loader not available');
             }
             
-            const envLoaded = await window.envLoader.loadEnvFile();
-            if (!envLoaded) {
-                throw new Error('.env file is required but could not be loaded. Please create a .env file with a valid OPENAI_API_KEY.');
+            const keyFileLoaded = await window.envLoader.loadEnvFile();
+            if (!keyFileLoaded) {
+                throw new Error('api-key.txt file is required but could not be loaded. Please create an api-key.txt file with a valid OpenAI API key.');
             }
             
-            // .env file exists, API key is now a hard requirement
-            const envApiKey = window.envLoader.get('OPENAI_API_KEY');
-            if (!envApiKey || !envApiKey.trim()) {
-                throw new Error('OPENAI_API_KEY is required in .env file but is missing or empty');
+            // api-key.txt file exists, API key is now a hard requirement
+            const apiKey = window.envLoader.get('OPENAI_API_KEY');
+            if (!apiKey || !apiKey.trim()) {
+                throw new Error('API key is required in api-key.txt file but is missing or empty');
             }
             
-            this.apiKey = envApiKey.trim();
-            this.apiKeySource = 'env';
-            console.log('API key loaded from .env file');
+            this.apiKey = apiKey.trim();
+            this.apiKeySource = 'txt';
+            console.log('API key loaded from api-key.txt file');
             
-            // Validate the key from .env - this is mandatory
+            // Validate the key from api-key.txt - this is mandatory
             this.isOnline = await this.validateApiKey();
             if (!this.isOnline) {
-                throw new Error('OPENAI_API_KEY from .env file is invalid or cannot connect to OpenAI API');
+                throw new Error('API key from api-key.txt file is invalid or cannot connect to OpenAI API');
             }
             
-            console.log('✅ .env API key validation successful');
+            console.log('✅ api-key.txt API key validation successful');
             return;
         } catch (error) {
             console.error('Failed to initialize API:', error);
@@ -63,26 +63,26 @@ class APIConfig {
     }
 
     /**
-     * Load configuration - DISABLED when .env is required
+     * Load configuration - DISABLED when api-key.txt is required
      */
     loadStoredConfig() {
-        // No-op: configuration must come from .env file only
-        console.log('localStorage configuration loading disabled - API key must come from .env file');
+        // No-op: configuration must come from api-key.txt file only
+        console.log('localStorage configuration loading disabled - API key must come from api-key.txt file');
     }
 
     /**
-     * Save configuration - DISABLED when .env is required
+     * Save configuration - DISABLED when api-key.txt is required
      */
     saveConfig() {
-        // No-op: configuration is managed via .env file only
-        console.log('Configuration saving disabled - API key managed via .env file');
+        // No-op: configuration is managed via api-key.txt file only
+        console.log('Configuration saving disabled - API key managed via api-key.txt file');
     }
 
     /**
-     * Set API key - DISABLED when .env is required
+     * Set API key - DISABLED when api-key.txt is required
      */
     async setApiKey(key) {
-        throw new Error('Manual API key setting is disabled. API key must be configured in .env file.');
+        throw new Error('Manual API key setting is disabled. API key must be configured in api-key.txt file.');
     }
 
     /**
@@ -245,7 +245,7 @@ class APIConfig {
     getMaskedApiKey() {
         if (!this.apiKey) return 'Not configured';
         const masked = `sk-...${this.apiKey.slice(-4)}`;
-        const source = this.apiKeySource ? ` (from ${this.apiKeySource === 'env' ? '.env file' : 'localStorage'})` : '';
+        const source = this.apiKeySource ? ` (from ${this.apiKeySource === 'txt' ? 'api-key.txt file' : 'localStorage'})` : '';
         return masked + source;
     }
 
@@ -257,30 +257,30 @@ class APIConfig {
     }
 
     /**
-     * Check if .env file is required (always true in strict mode)
+     * Check if api-key.txt file is required (always true in strict mode)
      */
     isEnvExpected() {
-        return true; // Always require .env file
+        return true; // Always require api-key.txt file
     }
 
     /**
-     * Check if .env API key is required (always true in strict mode)
+     * Check if api-key.txt API key is required (always true in strict mode)
      */
     isEnvRequired() {
-        return true; // Always require .env file
+        return true; // Always require api-key.txt file
     }
 
     /**
-     * Clear all configuration - DISABLED when .env is required
+     * Clear all configuration - DISABLED when api-key.txt is required
      */
     clearConfig() {
-        throw new Error('Configuration clearing is disabled. API key must be managed via .env file.');
+        throw new Error('Configuration clearing is disabled. API key must be managed via api-key.txt file.');
     }
 }
 
 /**
  * Fallback response system for offline mode
- * Note: This system is DISABLED when .env API key is expected
+ * Note: This system is DISABLED when api-key.txt API key is expected
  */
 class FallbackResponseSystem {
     constructor() {
@@ -332,7 +332,7 @@ class FallbackResponseSystem {
     }
 
     /**
-     * Disable fallback system (used when .env API key is required)
+     * Disable fallback system (used when api-key.txt API key is required)
      */
     disable() {
         this.disabled = true;
@@ -357,7 +357,7 @@ class FallbackResponseSystem {
      */
     generateResponse(phase, context = {}) {
         if (this.disabled) {
-            throw new Error('Fallback response system is disabled - valid .env API key is required');
+            throw new Error('Fallback response system is disabled - valid api-key.txt API key is required');
         }
         
         const parsed = {
@@ -414,7 +414,7 @@ class FallbackResponseSystem {
      */
     generateFallbackQuestion(factNumber = 0, previousUserResponse = null) {
         if (this.disabled) {
-            throw new Error('Fallback response system is disabled - valid .env API key is required');
+            throw new Error('Fallback response system is disabled - valid api-key.txt API key is required');
         }
         
         if (factNumber === 0) {
@@ -431,7 +431,7 @@ class FallbackResponseSystem {
      */
     generateContextualResponse(userInput, factNumber = 0) {
         if (this.disabled) {
-            throw new Error('Fallback response system is disabled - valid .env API key is required');
+            throw new Error('Fallback response system is disabled - valid api-key.txt API key is required');
         }
         
         // Different response types based on what the user shared
@@ -492,9 +492,9 @@ class FallbackResponseSystem {
 window.apiConfig = new APIConfig();
 window.fallbackSystem = new FallbackResponseSystem();
 
-// Always disable fallback system in strict .env mode
+// Always disable fallback system in strict api-key.txt mode
 window.fallbackSystem.disable();
-console.log('Fallback system permanently disabled - valid .env API key is required');
+console.log('Fallback system permanently disabled - valid api-key.txt API key is required');
 
 // Initialize system and handle errors by blocking application
 window.apiConfig.initPromise.then(() => {
