@@ -198,7 +198,7 @@ class VisualNovelGame {
     }
     
     /**
-     * Initialize LLM system and load settings
+     * Initialize LLM system and validate .env API key (blocking operation)
      */
     async initializeLLMSystem() {
         try {
@@ -207,22 +207,21 @@ class VisualNovelGame {
                 await window.apiConfig.initPromise;
             }
             
-            // Check if .env is expected and validate accordingly
-            if (window.apiConfig.isEnvExpected()) {
-                // .env file exists - API key is mandatory
-                if (!window.apiConfig.isConfigured() || !window.apiConfig.isOnline) {
-                    throw new Error('Valid OpenAI API key is required in .env file');
-                }
-                console.log('✅ .env API key validated successfully');
-            } else {
-                // No .env file - localStorage or no API key is allowed
-                console.log('ℹ️ No .env file detected, localStorage or offline mode allowed');
+            // .env file and valid API key are mandatory
+            if (!window.apiConfig.isConfigured() || !window.apiConfig.isOnline) {
+                throw new Error('Valid OpenAI API key is required in .env file. Application cannot start without proper configuration.');
             }
             
-            // Check if API is configured
-            this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
+            console.log('✅ .env API key validated successfully');
             
-            // Load saved settings
+            // Ensure fallback system is disabled
+            if (!window.fallbackSystem.isDisabled()) {
+                window.fallbackSystem.disable();
+            }
+            
+            this.state.llmEnabled = true;
+            
+            // Load saved UI settings (not API settings)
             this.loadLLMSettings();
             
             // Update debug info
@@ -234,7 +233,7 @@ class VisualNovelGame {
     }
     
     /**
-     * Load LLM settings from storage and update UI
+     * Load LLM UI settings and configure interface for .env-only mode
      */
     loadLLMSettings() {
         try {
@@ -243,35 +242,24 @@ class VisualNovelGame {
                 const settings = JSON.parse(saved);
                 this.state.debugMode = settings.debugMode || false;
                 this.elements.debugModeCheckbox.checked = this.state.debugMode;
-                this.elements.offlineModeCheckbox.checked = settings.offlineMode || false;
+                // Disable offline mode checkbox since fallback is not allowed
+                this.elements.offlineModeCheckbox.checked = false;
+                this.elements.offlineModeCheckbox.disabled = true;
             }
         } catch (error) {
             console.warn('Failed to load LLM UI settings:', error);
         }
         
-        // Check if .env is expected and disable manual API key input
-        if (window.apiConfig.isEnvExpected()) {
-            this.elements.apiKeyInput.disabled = true;
-            this.elements.apiKeyInput.placeholder = 'API key managed by .env file';
-            this.elements.testApiButton.disabled = true;
-            
-            // Show .env key status (masked)
-            if (window.apiConfig.isConfigured()) {
-                this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey().split(' (')[0];
-            } else {
-                this.elements.apiKeyInput.value = 'Not configured in .env';
-            }
+        // Always disable manual API key input in strict .env mode
+        this.elements.apiKeyInput.disabled = true;
+        this.elements.apiKeyInput.placeholder = 'API key managed by .env file';
+        this.elements.testApiButton.disabled = true;
+        
+        // Show .env key status (masked)
+        if (window.apiConfig.isConfigured()) {
+            this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey().split(' (')[0];
         } else {
-            // Enable manual input when no .env is detected
-            this.elements.apiKeyInput.disabled = false;
-            this.elements.apiKeyInput.placeholder = 'sk-...';
-            this.elements.testApiButton.disabled = false;
-            
-            // Update UI with current API config
-            if (window.apiConfig.isConfigured()) {
-                this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey().split(' (')[0];
-                this.elements.modelSelect.value = window.apiConfig.model;
-            }
+            this.elements.apiKeyInput.value = 'Not configured in .env';
         }
         
         this.updateApiStatus();
@@ -289,32 +277,20 @@ class VisualNovelGame {
     }
     
     /**
-     * Update API key source display
+     * Update API key source display for .env-only mode
      */
     updateApiKeySourceDisplay() {
         const source = window.apiConfig.getApiKeySource();
         
-        if (window.apiConfig.isEnvExpected()) {
-            // .env file is expected
-            if (source === 'env' && window.apiConfig.isOnline) {
-                this.elements.apiKeySource.textContent = '✅ API key loaded and validated from .env file';
-                this.elements.apiKeySource.className = 'setting-info env success';
-            } else if (source === 'env' && !window.apiConfig.isOnline) {
-                this.elements.apiKeySource.textContent = '❌ API key from .env file is invalid';
-                this.elements.apiKeySource.className = 'setting-info env error';
-            } else {
-                this.elements.apiKeySource.textContent = '❌ .env file detected but OPENAI_API_KEY is missing or empty';
-                this.elements.apiKeySource.className = 'setting-info env error';
-            }
-        } else if (source) {
-            const sourceText = source === 'env' ? 
-                '✅ API key loaded from .env file' : 
-                'ℹ️ API key from localStorage (manual entry)';
-            this.elements.apiKeySource.textContent = sourceText;
-            this.elements.apiKeySource.className = `setting-info ${source}`;
+        if (source === 'env' && window.apiConfig.isOnline) {
+            this.elements.apiKeySource.textContent = '✅ API key loaded and validated from .env file';
+            this.elements.apiKeySource.className = 'setting-info env success';
+        } else if (source === 'env' && !window.apiConfig.isOnline) {
+            this.elements.apiKeySource.textContent = '❌ API key from .env file is invalid';
+            this.elements.apiKeySource.className = 'setting-info env error';
         } else {
-            this.elements.apiKeySource.textContent = '';
-            this.elements.apiKeySource.className = 'setting-info';
+            this.elements.apiKeySource.textContent = '❌ .env file is required but OPENAI_API_KEY is missing or empty';
+            this.elements.apiKeySource.className = 'setting-info env error';
         }
     }
     
@@ -326,61 +302,25 @@ class VisualNovelGame {
     }
     
     /**
-     * Test API connection
+     * Test API connection - DISABLED in .env-only mode
      */
     async testApiConnection() {
-        const apiKey = this.elements.apiKeyInput.value.trim();
-        if (!apiKey) {
-            alert('Please enter an API key first.');
-            return;
-        }
-        
-        this.elements.statusIndicator.textContent = 'Testing...';
-        this.elements.statusIndicator.className = 'testing';
-        this.elements.testApiButton.disabled = true;
-        
-        try {
-            const isValid = await window.apiConfig.setApiKey(apiKey);
-            this.state.llmEnabled = isValid && !this.elements.offlineModeCheckbox.checked;
-            this.updateApiStatus();
-            
-            if (isValid) {
-                alert('API connection successful!');
-            } else {
-                alert('API connection failed. Please check your API key.');
-            }
-        } catch (error) {
-            console.error('API test failed:', error);
-            alert('API test failed: ' + error.message);
-            this.updateApiStatus();
-        } finally {
-            this.elements.testApiButton.disabled = false;
-        }
+        alert('API testing is disabled. API key is managed through .env file and validated automatically.');
     }
     
     /**
-     * Save settings
+     * Save settings - LIMITED in .env-only mode
      */
     saveSettings() {
-        const apiKey = this.elements.apiKeyInput.value.trim();
-        const model = this.elements.modelSelect.value;
         const debugMode = this.elements.debugModeCheckbox.checked;
-        const offlineMode = this.elements.offlineModeCheckbox.checked;
         
-        // Save API config
-        if (apiKey && !apiKey.includes('...')) {
-            window.apiConfig.setApiKey(apiKey);
-        }
-        window.apiConfig.model = model;
-        window.apiConfig.saveConfig();
-        
-        // Save UI settings
-        const uiSettings = { debugMode, offlineMode };
+        // Save only UI settings, not API config
+        const uiSettings = { debugMode };
         localStorage.setItem('llm_ui_settings', JSON.stringify(uiSettings));
         
         // Update state
         this.state.debugMode = debugMode;
-        this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
+        this.state.llmEnabled = window.apiConfig.isOnline; // offline mode disabled
         
         this.updateApiStatus();
         this.updateDebugInfo();
@@ -396,26 +336,10 @@ class VisualNovelGame {
     }
     
     /**
-     * Clear all settings
+     * Clear all settings - DISABLED in .env-only mode
      */
     clearSettings() {
-        if (confirm('Are you sure you want to clear all API settings and data?')) {
-            window.apiConfig.clearConfig();
-            localStorage.removeItem('llm_ui_settings');
-            
-            this.elements.apiKeyInput.value = '';
-            this.elements.modelSelect.value = 'gpt-4';
-            this.elements.debugModeCheckbox.checked = false;
-            this.elements.offlineModeCheckbox.checked = false;
-            
-            this.state.llmEnabled = false;
-            this.state.debugMode = false;
-            
-            this.updateApiStatus();
-            this.updateDebugInfo();
-            this.updateApiKeySourceDisplay();
-            this.elements.debugPanel.classList.add('hidden');
-        }
+        alert('Settings clearing is disabled. API key is managed through .env file.');
     }
     
     /**
@@ -432,11 +356,12 @@ class VisualNovelGame {
     }
     
     /**
-     * Toggle offline mode
+     * Toggle offline mode - DISABLED in .env-only mode
      */
     toggleOfflineMode() {
-        const offlineMode = this.elements.offlineModeCheckbox.checked;
-        this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
+        // Offline mode is disabled in .env-only mode
+        this.elements.offlineModeCheckbox.checked = false;
+        this.state.llmEnabled = window.apiConfig.isOnline;
         this.updateApiStatus();
     }
     
@@ -582,27 +507,16 @@ class VisualNovelGame {
     
     async startIntroduction() {
         try {
-            let greeting;
-            if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                greeting = await this.generateDynamicGreeting();
-            } else if (window.apiConfig.isEnvExpected()) {
-                // .env is expected but API is not working - this should not happen if initialization worked
+            // API is required - no fallback allowed
+            if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
                 throw new Error('API is required but not available - this should have been caught during initialization');
-            } else {
-                greeting = window.fallbackSystem.generateResponse('introduction').response;
             }
+            
+            const greeting = await this.generateDynamicGreeting();
             await this.displayMessage(greeting);
         } catch (error) {
             console.error('Error generating greeting:', error);
-            
-            // Only use fallback if .env is not expected
-            if (!window.apiConfig.isEnvExpected()) {
-                const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
-                await this.displayMessage(fallbackGreeting);
-            } else {
-                // .env is expected - should not reach here due to initialization checks
-                throw new Error('Cannot generate greeting: API is required but not available');
-            }
+            throw new Error('Cannot generate greeting: API is required but not available');
         }
         
         // Start dynamic conversation flow
@@ -656,43 +570,26 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
             return;
         }
         
-        // Generate dynamic question using LLM or fall back to static
-        let prompt;
+        // Generate dynamic question using LLM (required)
         try {
-            prompt = await this.generateDynamicQuestion();
+            const prompt = await this.generateDynamicQuestion();
+            this.elements.inputLabel.textContent = prompt;
+            this.elements.textInput.value = '';
+            this.elements.textInput.placeholder = 'Type your response here...';
+            this.elements.textInputContainer.classList.remove('hidden');
+            this.elements.textInput.focus();
         } catch (error) {
-            console.warn('Dynamic question generation failed:', error);
-            
-            if (window.apiConfig.isEnvExpected()) {
-                // .env is expected - should not use fallback
-                throw new Error('Cannot generate question: API is required but not available');
-            } else {
-                // Use static fallback for non-.env scenarios
-                const currentFactType = factTypes[this.state.currentStep];
-                prompt = this.dialogueData.introduction.factPrompts[currentFactType];
-            }
+            console.error('Dynamic question generation failed:', error);
+            throw new Error('Cannot generate question: API is required but not available');
         }
-        
-        this.elements.inputLabel.textContent = prompt;
-        this.elements.textInput.value = '';
-        this.elements.textInput.placeholder = 'Type your response here...';
-        this.elements.textInputContainer.classList.remove('hidden');
-        this.elements.textInput.focus();
     }
     
     /**
-     * Generate dynamic, contextual questions using LLM
+     * Generate dynamic, contextual questions using LLM (required)
      */
     async generateDynamicQuestion() {
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            if (window.apiConfig.isEnvExpected()) {
-                throw new Error('API is required but not available');
-            }
-            // Use improved fallback questions instead of static fact-based ones
-            return window.fallbackSystem.generateFallbackQuestion(
-                this.state.currentStep,
-                this.state.dialogue[this.state.dialogue.length - 1]?.text
-            );
+            throw new Error('API is required but not available');
         }
         
         // Build context for question generation
@@ -772,45 +669,32 @@ Respond with just the question, no additional text.`;
                 }, 1000);
             } catch (error) {
                 console.error('Error generating response:', error);
-                // Fallback to static response
-                const fallbackResponse = window.fallbackSystem.generateResponse('introduction', {
-                    factType: factType,
-                    value: input
-                });
-                await this.displayMessage(fallbackResponse.response);
-                this.state.currentStep++;
-                
-                setTimeout(() => {
-                    this.collectNextFact();
-                }, 1000);
+                // No fallback - throw error to block application
+                throw new Error('Cannot generate response: API is required but not available');
             }
         }, this.getTypingDelay());
     }
     
     async generateFactResponse(factType, value) {
-        // Use LLM if enabled and available
-        if (this.state.llmEnabled && window.apiConfig.isOnline) {
-            try {
-                return await this.generateDynamicResponse(value);
-            } catch (error) {
-                console.warn('LLM request failed, falling back to contextual response:', error);
-                // Fall through to improved fallback response
-            }
+        // Use LLM (required)
+        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+            throw new Error('API is required but not available');
         }
         
-        // Use improved contextual fallback response instead of old factType templates
-        window.fallbackSystem.updateConversationHistory(value);
-        return window.fallbackSystem.generateContextualResponse(value, this.state.currentStep);
+        try {
+            return await this.generateDynamicResponse(value);
+        } catch (error) {
+            console.error('LLM request failed:', error);
+            throw error;
+        }
     }
     
     /**
-     * Generate dynamic response to user input using LLM
+     * Generate dynamic response to user input using LLM (required)
      */
     async generateDynamicResponse(userInput) {
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            // Use improved fallback responses
-            window.fallbackSystem.updateConversationHistory(userInput);
-            return window.fallbackSystem.generateContextualResponse(userInput, this.state.currentStep);
+            throw new Error('API is required but not available');
         }
         
         const conversationHistory = this.state.dialogue.slice(-2); // Last 2 exchanges for context
@@ -888,18 +772,18 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startQuiz() {
         try {
-            let quizIntro;
-            if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                quizIntro = await this.generateLLMResponse('quiz', { 
-                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-                });
-            } else {
-                quizIntro = window.fallbackSystem.generateResponse('quiz').response;
+            // API is required
+            if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+                throw new Error('API is required but not available');
             }
+            
+            const quizIntro = await this.generateLLMResponse('quiz', { 
+                customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+            });
             await this.displayMessage(quizIntro);
         } catch (error) {
             console.error('Error generating quiz intro:', error);
-            await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+            throw new Error('Cannot generate quiz intro: API is required but not available');
         }
         
         // Generate quiz questions with options
@@ -1053,23 +937,19 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startRating() {
         try {
-            let outroMessage;
-            if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                outroMessage = await this.generateLLMResponse('outro', {
-                    facts: this.state.playerFacts,
-                    memoryImpaired: this.state.characterType === 'B'
-                });
-            } else {
-                outroMessage = window.fallbackSystem.generateResponse('outro', {
-                    facts: this.state.playerFacts,
-                    memoryImpaired: this.state.characterType === 'B'
-                }).response;
+            // API is required
+            if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
+                throw new Error('API is required but not available');
             }
+            
+            const outroMessage = await this.generateLLMResponse('outro', {
+                facts: this.state.playerFacts,
+                memoryImpaired: this.state.characterType === 'B'
+            });
             await this.displayMessage(outroMessage);
         } catch (error) {
             console.error('Error generating outro:', error);
-            const fallbackOutro = this.generatePersonalizedOutro();
-            await this.displayMessage(fallbackOutro);
+            throw new Error('Cannot generate outro: API is required but not available');
         }
         
         setTimeout(() => {
