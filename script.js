@@ -149,62 +149,80 @@ class VisualNovelGame {
         let additionalHelp = '';
         
         if (errorMessage.includes('api-key.txt file is required')) {
-            errorType = 'Missing api-key.txt File';
+            errorType = 'Quick Setup Required';
             additionalHelp = `
                 <div style="background-color: #e7f3ff; border: 1px solid #b8daff; border-radius: 4px; padding: 15px; margin: 15px 0;">
-                    <h4 style="margin-top: 0; color: #004085;">🛠️ How to create api-key.txt:</h4>
-                    <ol style="margin-bottom: 0;">
-                        <li>Create a new file named <code>api-key.txt</code> in the same directory as this HTML file</li>
-                        <li>Open the file in a text editor</li>
-                        <li>Paste your OpenAI API key (it should start with <code>sk-</code>)</li>
-                        <li>Save the file and refresh this page</li>
+                    <h4 style="margin-top: 0; color: #004085;">🚀 Welcome! Let's get you set up in 4 easy steps:</h4>
+                    <ol style="margin-bottom: 0; line-height: 1.6;">
+                        <li><strong>Create the file:</strong> Make a new file named <code>api-key.txt</code> in the same folder as this application</li>
+                        <li><strong>Open the file:</strong> Use any text editor (Notepad, VS Code, etc.)</li>
+                        <li><strong>Add your API key:</strong> Paste your OpenAI API key (starts with <code>sk-</code>) and save</li>
+                        <li><strong>Refresh:</strong> Come back here and click the retry button below</li>
                     </ol>
+                    <div style="background-color: #fff; border-radius: 4px; padding: 10px; margin-top: 10px; border-left: 4px solid #007bff;">
+                        <small>💡 <strong>Why do I need this?</strong> This app uses OpenAI's AI to create personalized conversations. The API key allows secure access to these AI services.</small>
+                    </div>
                 </div>
             `;
         } else if (errorMessage.includes('missing or empty')) {
-            errorType = 'Empty API Key';
+            errorType = 'API Key Needed';
             additionalHelp = `
                 <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; margin: 15px 0;">
-                    <h4 style="margin-top: 0; color: #856404;">📝 The api-key.txt file exists but is empty</h4>
-                    <p style="margin-bottom: 0;">Open the api-key.txt file and add your OpenAI API key. The key should start with "sk-" and be about 50 characters long.</p>
+                    <h4 style="margin-top: 0; color: #856404;">📝 Almost there! Your api-key.txt file is ready, but it needs content</h4>
+                    <div style="line-height: 1.6;">
+                        <p style="margin-bottom: 10px;">Your file exists but is empty. Here's what to do:</p>
+                        <ol style="margin-bottom: 10px;">
+                            <li>Open your <code>api-key.txt</code> file</li>
+                            <li>Paste your OpenAI API key (should look like: <code>sk-abc123...</code>)</li>
+                            <li>Save the file and come back here</li>
+                        </ol>
+                        <small>🔍 <strong>API Key Format:</strong> Should start with "sk-" and be about 50 characters long</small>
+                    </div>
                 </div>
             `;
         } else if (errorMessage.includes('failed validation')) {
-            errorType = 'API Key Validation Failed';
+            errorType = 'Connection Issue';
             additionalHelp = `
                 <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; margin: 15px 0;">
-                    <h4 style="margin-top: 0; color: #721c24;">🔍 Validation Failed</h4>
-                    <p><strong>Possible causes:</strong></p>
-                    <ul style="margin-bottom: 0;">
-                        <li>The API key is invalid or expired</li>
-                        <li>No internet connection</li>
-                        <li>OpenAI API is temporarily unavailable</li>
-                        <li>Browser is blocking the validation request (CORS policy)</li>
+                    <h4 style="margin-top: 0; color: #721c24;">🔍 Your API key couldn't be verified</h4>
+                    <p style="margin-bottom: 10px;"><strong>This usually means one of these things:</strong></p>
+                    <ul style="margin-bottom: 15px; line-height: 1.6;">
+                        <li><strong>Invalid or expired key:</strong> Double-check your API key from OpenAI</li>
+                        <li><strong>Internet connection:</strong> Make sure you're connected to the internet</li>
+                        <li><strong>OpenAI service:</strong> Their API might be temporarily down</li>
+                        <li><strong>Browser restrictions:</strong> Some browsers block API validation requests</li>
                     </ul>
+                    <div style="background-color: #fff; border-radius: 4px; padding: 10px; border-left: 4px solid #dc3545;">
+                        <small>💡 <strong>Quick fix:</strong> Try refreshing the page first. If that doesn't work, verify your API key at <a href="https://platform.openai.com/api-keys" target="_blank" style="color: #721c24;">platform.openai.com</a></small>
+                    </div>
                 </div>
             `;
         }
         
         // Display comprehensive error message
         this.elements.dialogueText.innerHTML = `
-            <div style="color: #dc3545; border: 2px solid #dc3545; border-radius: 8px; padding: 20px; margin: 20px 0; background-color: #f8d7da;">
-                <h3 style="margin-top: 0; color: #721c24;">⚠️ ${errorType}</h3>
-                <div style="background-color: white; border-radius: 4px; padding: 15px; margin: 10px 0; color: #000;">
-                    <strong>Error details:</strong><br>
-                    ${errorMessage.replace(/\n/g, '<br>')}
-                </div>
+            <div style="color: #495057; border: 2px solid #007bff; border-radius: 8px; padding: 20px; margin: 20px 0; background-color: #f8f9fa;">
+                <h3 style="margin-top: 0; color: #007bff;">🚀 ${errorType}</h3>
                 ${additionalHelp}
-                <hr style="border-color: #dc3545;">
-                <h4 style="color: #721c24;">🔧 General Troubleshooting:</h4>
-                <ul style="margin-bottom: 10px;">
-                    <li><strong>Check file location:</strong> Ensure api-key.txt is in the same directory as index.html</li>
-                    <li><strong>Verify key format:</strong> API key should start with "sk-" and be ~50 characters</li>
-                    <li><strong>Test internet:</strong> Make sure you have a working internet connection</li>
-                    <li><strong>Check browser console:</strong> Look for additional error messages</li>
+                <hr style="border-color: #dee2e6; margin: 20px 0;">
+                <h4 style="color: #495057; margin-bottom: 15px;">🛠️ Troubleshooting Tips:</h4>
+                <ul style="margin-bottom: 15px; line-height: 1.6;">
+                    <li><strong>File location:</strong> Make sure <code>api-key.txt</code> is in the same folder as <code>index.html</code></li>
+                    <li><strong>Key format:</strong> API key should start with "sk-" and be about 50 characters long</li>
+                    <li><strong>Internet connection:</strong> Verify you're connected to the internet</li>
+                    <li><strong>Browser console:</strong> Check for any additional error messages (press F12)</li>
                 </ul>
-                <div style="background-color: #d1ecf1; border: 1px solid #b8daff; border-radius: 4px; padding: 10px; margin: 10px 0;">
-                    <strong>🔄 After making changes:</strong> Refresh this page to retry the validation process.
+                <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; padding: 12px; margin-top: 15px;">
+                    <strong>🔄 Ready to try again?</strong> After making changes, click the "Retry Validation" button below or refresh this page.
                 </div>
+                <details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; color: #6c757d; font-size: 14px;">
+                        <strong>Show technical details</strong>
+                    </summary>
+                    <div style="background-color: #f8f9fa; border-radius: 4px; padding: 10px; margin-top: 8px; font-family: monospace; font-size: 12px; color: #6c757d;">
+                        ${errorMessage.replace(/\n/g, '<br>')}
+                    </div>
+                </details>
             </div>
         `;
         
@@ -213,11 +231,11 @@ class VisualNovelGame {
         this.elements.restartButton.classList.remove('hidden');
         this.elements.restartButton.textContent = '🔄 Retry Validation';
         
-        // Update progress indicator with more specific status
+        // Update progress indicator with more user-friendly status
         this.elements.progressIndicator.textContent = errorType;
-        this.elements.progressIndicator.style.color = '#dc3545';
+        this.elements.progressIndicator.style.color = '#007bff';
         
-        console.error(`❌ Application blocked due to API configuration error (${errorType}):`, errorMessage);
+        console.info(`ℹ️ Application setup required (${errorType}):`, errorMessage);
     }
 
     loadDialogueData() {
