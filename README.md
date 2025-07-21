@@ -54,7 +54,15 @@ Users interact with one randomly assigned character through a structured convers
    - Create an account and generate an API key
    - Ensure you have available credits/usage quota
 
-2. **Configure API Access**:
+2. **Configure API Access** (Choose one method):
+
+   **Method A: Using .env File (Recommended for developers)**:
+   - Open the `.env` file in the project root
+   - Add your OpenAI API key after `OPENAI_API_KEY=`
+   - Save the file
+   - Open the HTML file - your key will be loaded automatically
+
+   **Method B: Using Settings Interface**:
    - Open the application in your browser
    - Click the **⚙️ Settings** button in the header
    - Enter your OpenAI API key in the provided field

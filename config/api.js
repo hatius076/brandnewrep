@@ -15,24 +15,69 @@ class APIConfig {
         this.requestCount = 0;
         this.estimatedCost = 0;
         
-        this.loadStoredConfig();
+        // Load config asynchronously
+        this.initializeConfig();
     }
 
     /**
-     * Load configuration from localStorage
+     * Initialize configuration asynchronously
      */
-    loadStoredConfig() {
+    async initializeConfig() {
+        await this.loadStoredConfig();
+        if (this.apiKey) {
+            this.isOnline = await this.validateApiKey();
+        }
+    }
+
+    /**
+     * Load configuration from localStorage and optionally from .env file
+     */
+    async loadStoredConfig() {
         try {
+            // First try to load from .env file if available
+            await this.loadFromEnvFile();
+            
+            // Then load from localStorage (will override .env if present)
             const stored = localStorage.getItem('llm_config');
             if (stored) {
                 const config = JSON.parse(stored);
-                this.apiKey = config.apiKey;
+                if (config.apiKey) this.apiKey = config.apiKey;
                 this.model = config.model || 'gpt-4';
                 this.temperature = config.temperature || 0.7;
                 this.maxTokens = config.maxTokens || 500;
             }
         } catch (error) {
             console.warn('Failed to load stored API config:', error);
+        }
+    }
+
+    /**
+     * Attempt to load API key from .env file
+     * This is a simple implementation for client-side .env reading
+     */
+    async loadFromEnvFile() {
+        try {
+            // Check if we're running locally and can access .env file
+            const response = await fetch('./.env');
+            if (response.ok) {
+                const envContent = await response.text();
+                const lines = envContent.split('\n');
+                
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (trimmedLine.startsWith('OPENAI_API_KEY=') && !trimmedLine.startsWith('#')) {
+                        const value = trimmedLine.split('=')[1]?.trim();
+                        if (value && value !== '') {
+                            this.apiKey = value;
+                            console.log('API key loaded from .env file');
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            // Silently fail - .env file reading is optional
+            // This is expected when running from file:// protocol or when .env doesn't exist
         }
     }
 
