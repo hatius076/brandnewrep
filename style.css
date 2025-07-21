@@ -666,6 +666,250 @@ body {
     color: #7f8c8d;
 }
 
+/* User-Controlled Quiz Styles */
+.quiz-control-interface, #user-quiz-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.quiz-intro h3 {
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.quiz-intro p {
+    color: #7f8c8d;
+    margin-bottom: 1.5rem;
+}
+
+.question-categories {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.category-filter {
+    padding: 0.5rem 1rem;
+    border: 2px solid #ecf0f1;
+    background-color: white;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.category-filter:hover {
+    border-color: #3498db;
+    color: #3498db;
+}
+
+.category-filter.active {
+    background-color: #3498db;
+    border-color: #3498db;
+    color: white;
+}
+
+.available-questions {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ecf0f1;
+    border-radius: 8px;
+    background-color: white;
+}
+
+.question-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #ecf0f1;
+    transition: background-color 0.2s ease;
+}
+
+.question-option:last-child {
+    border-bottom: none;
+}
+
+.question-option:hover {
+    background-color: #f8f9fa;
+}
+
+.question-option.selected {
+    background-color: #e8f4fd;
+    border-left: 4px solid #3498db;
+}
+
+.question-content {
+    flex: 1;
+}
+
+.question-text {
+    font-weight: 500;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.question-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: #7f8c8d;
+}
+
+.fact-number {
+    font-weight: 500;
+}
+
+.difficulty {
+    color: #f39c12;
+}
+
+.category {
+    background-color: #ecf0f1;
+    padding: 0.2rem 0.5rem;
+    border-radius: 10px;
+    text-transform: capitalize;
+}
+
+.select-question-btn {
+    padding: 0.5rem 1rem;
+    border: 2px solid #3498db;
+    background-color: white;
+    color: #3498db;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.select-question-btn:hover {
+    background-color: #3498db;
+    color: white;
+}
+
+.select-question-btn.remove {
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+.select-question-btn.remove:hover {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.quiz-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #ecf0f1;
+}
+
+.selected-count {
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.start-quiz-btn {
+    padding: 0.75rem 1.5rem;
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.start-quiz-btn:hover:not(:disabled) {
+    background-color: #229954;
+    transform: translateY(-1px);
+}
+
+.start-quiz-btn:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Quiz Progress Styles */
+#quiz-progress {
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #ecf0f1;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #3498db;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+.ask-question-btn {
+    width: 100%;
+    padding: 1rem;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.ask-question-btn:hover {
+    background-color: #2980b9;
+}
+
+/* Mobile responsiveness for quiz interface */
+@media (max-width: 768px) {
+    .question-categories {
+        flex-direction: column;
+    }
+    
+    .category-filter {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .question-option {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .quiz-controls {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .start-quiz-btn {
+        width: 100%;
+    }
+}
+
 /* Mobile responsiveness for modal */
 @media (max-width: 768px) {
     .modal-content {

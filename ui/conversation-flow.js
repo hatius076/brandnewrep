@@ -81,8 +81,9 @@ class ConversationFlowController {
         this.state.waitingForUser = true;
         this.state.responseInProgress = false;
         
-        // Show appropriate input interface
+        // Show appropriate input interface and set up prompt
         this.showUserInput(data.inputType || 'text');
+        this.setupUserPrompt(data);
         
         // Set timeout for user response
         this.userTimeout = setTimeout(() => {
@@ -91,6 +92,43 @@ class ConversationFlowController {
         
         // Enable input if not already enabled
         this.enableUserInput();
+    }
+
+    /**
+     * Setup user prompt based on current context
+     */
+    setupUserPrompt(data) {
+        if (data.inputType === 'text' && this.game.state.phase === 'introduction') {
+            const inputLabel = document.getElementById('input-label');
+            const textInput = document.getElementById('text-input');
+            
+            if (inputLabel && textInput) {
+                // Use Warden AI to generate the prompt
+                const prompt = this.generateDynamicPrompt();
+                inputLabel.textContent = prompt;
+                textInput.placeholder = "Type your response here...";
+                textInput.focus();
+            }
+        }
+    }
+
+    /**
+     * Generate dynamic prompt based on conversation state
+     */
+    generateDynamicPrompt() {
+        if (this.game.dynamicFacts.factCounter === 0) {
+            return "Tell me about yourself! What's something interesting you'd like to share?";
+        } else {
+            // Generate follow-up based on previous facts
+            const prompts = [
+                "What else would you like me to know about you?",
+                "Tell me about another aspect of your life.",
+                "What's something else that's important to you?",
+                "I'd love to hear more about you!",
+                "What's another interesting fact about yourself?"
+            ];
+            return prompts[Math.floor(Math.random() * prompts.length)];
+        }
     }
 
     /**
@@ -130,23 +168,60 @@ class ConversationFlowController {
                 return data.message;
             }
 
-            // Generate dynamic response using Warden AI and LLM
+            // Generate dynamic response using enhanced prompts
             const context = this.buildCurrentContext();
             
             if (this.game.state.llmEnabled && window.apiConfig.isOnline) {
-                return await this.game.generateLLMResponse(
-                    this.game.state.phase, 
-                    { 
-                        ...context, 
-                        ...data 
+                if (data.userInput && this.game.state.phase === 'introduction') {
+                    // Generate response to user fact sharing
+                    const enhancedContext = buildDynamicContext(
+                        this.game.state.dialogue,
+                        this.game.dynamicFacts.getAllFacts(),
+                        'introduction',
+                        this.game.dynamicFacts.factCounter
+                    );
+                    
+                    const prompt = buildEnhancedCharacterPrompt(
+                        this.game.state.characterType,
+                        enhancedContext,
+                        'introduction',
+                        { 
+                            userInput: data.userInput,
+                            factNumber: this.game.dynamicFacts.factCounter
+                        }
+                    );
+                    
+                    const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+                    const parsed = parseEnhancedLLMResponse(response.content);
+                    
+                    this.game.state.lastLLMThought = parsed.thought;
+                    if (this.game.state.debugMode) {
+                        this.game.updateDebugInfo();
                     }
-                );
+                    
+                    return parsed.response;
+                } else {
+                    return await this.game.generateLLMResponse(
+                        this.game.state.phase, 
+                        { 
+                            ...context, 
+                            ...data 
+                        }
+                    );
+                }
             } else {
                 // Fallback response
-                return window.fallbackSystem.generateResponse(
-                    this.game.state.phase, 
-                    context
-                ).response;
+                if (data.userInput && this.game.state.phase === 'introduction') {
+                    return window.fallbackSystem.generateResponse(
+                        'introduction',
+                        { factType: 'general', value: data.userInput }
+                    ).response;
+                } else {
+                    return window.fallbackSystem.generateResponse(
+                        this.game.state.phase, 
+                        context
+                    ).response;
+                }
             }
         } catch (error) {
             console.error('Failed to generate agent response:', error);

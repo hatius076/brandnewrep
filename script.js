@@ -24,6 +24,13 @@ class VisualNovelGame {
         
         this.elements = {};
         this.llmClient = null;
+        
+        // Initialize new systems
+        this.dynamicFacts = new DynamicFactSystem();
+        this.wardenAI = new WardenAI(this);
+        this.conversationFlow = new ConversationFlowController(this);
+        this.userQuiz = null; // Will be initialized when needed
+        
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
@@ -52,6 +59,16 @@ class VisualNovelGame {
             quizContainer: document.getElementById('quiz-container'),
             quizQuestion: document.getElementById('quiz-question'),
             quizOptions: document.getElementById('quiz-options'),
+            
+            // User-controlled quiz elements
+            userQuizContainer: document.getElementById('user-quiz-container'),
+            availableQuestions: document.getElementById('available-questions'),
+            selectedCount: document.getElementById('selected-count'),
+            startQuizBtn: document.getElementById('start-quiz-btn'),
+            quizProgress: document.getElementById('quiz-progress'),
+            quizProgressFill: document.getElementById('quiz-progress-fill'),
+            currentQuestion: document.getElementById('current-question'),
+            totalQuestions: document.getElementById('total-questions'),
             
             ratingContainer: document.getElementById('rating-container'),
             ratingQuestion: document.getElementById('rating-question'),
@@ -92,10 +109,21 @@ class VisualNovelGame {
     }
     
     initializeEventListeners() {
-        // Text input submission
-        this.elements.submitButton.addEventListener('click', () => this.handleTextSubmit());
+        // Text input submission - direct approach
+        this.elements.submitButton.addEventListener('click', () => {
+            const input = this.elements.textInput.value.trim();
+            if (input) {
+                this.processUserInput(input);
+            }
+        });
+        
         this.elements.textInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleTextSubmit();
+            if (e.key === 'Enter') {
+                const input = this.elements.textInput.value.trim();
+                if (input) {
+                    this.processUserInput(input);
+                }
+            }
         });
         
         // Continue button
@@ -107,6 +135,18 @@ class VisualNovelGame {
                 this.handleRatingSelect(e.target);
             }
         });
+        
+        // Quiz category filters
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('category-filter')) {
+                this.handleCategoryFilter(e.target);
+            }
+        });
+        
+        // Start quiz button
+        if (this.elements.startQuizBtn) {
+            this.elements.startQuizBtn.addEventListener('click', () => this.startUserControlledQuiz());
+        }
         
         // Restart button
         this.elements.restartButton.addEventListener('click', () => this.restartGame());
@@ -130,6 +170,133 @@ class VisualNovelGame {
         
         // Debug panel
         this.elements.toggleDebug.addEventListener('click', () => this.toggleDebugPanel());
+    }
+
+    /**
+     * Process user input directly
+     */
+    async processUserInput(input) {
+        // Clear input and disable while processing
+        this.elements.textInput.value = '';
+        this.elements.textInput.disabled = true;
+        this.elements.submitButton.disabled = true;
+        this.hideAllInputs();
+        
+        // Record fact in dynamic system
+        if (this.state.phase === 'introduction') {
+            const fact = this.dynamicFacts.recordFact(input);
+            this.logEvent('dynamic_fact_collected', {
+                factNumber: fact.factNumber,
+                content: fact.content,
+                category: fact.category,
+                memorable: fact.memorable
+            });
+            
+            // Add user input to dialogue
+            this.state.dialogue.push({
+                timestamp: Date.now(),
+                speaker: 'User',
+                text: input,
+                phase: this.state.phase
+            });
+        }
+        
+        // Generate agent response
+        try {
+            let response;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                const context = buildDynamicContext(
+                    this.state.dialogue,
+                    this.dynamicFacts.getAllFacts(),
+                    'introduction',
+                    this.dynamicFacts.factCounter
+                );
+                
+                const prompt = buildEnhancedCharacterPrompt(
+                    this.state.characterType,
+                    context,
+                    'introduction',
+                    { 
+                        userInput: input,
+                        factNumber: this.dynamicFacts.factCounter
+                    }
+                );
+                
+                const llmResponse = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+                const parsed = parseEnhancedLLMResponse(llmResponse.content);
+                
+                this.state.lastLLMThought = parsed.thought;
+                if (this.state.debugMode) {
+                    this.updateDebugInfo();
+                }
+                
+                response = parsed.response;
+            } else {
+                // Fallback response
+                response = window.fallbackSystem.generateResponse(
+                    'introduction',
+                    { factType: 'general', value: input }
+                ).response;
+            }
+            
+            // Display response
+            await this.displayMessage(response);
+            
+            // Check if we should continue or transition
+            if (this.dynamicFacts.factCounter >= 6) {
+                // Transition to quiz
+                setTimeout(() => {
+                    this.enterPhase('quiz');
+                }, 2000);
+            } else {
+                // Continue with next fact collection
+                setTimeout(() => {
+                    this.showNextFactPrompt();
+                }, 1500);
+            }
+            
+        } catch (error) {
+            console.error('Error processing user input:', error);
+            // Fallback response
+            const response = window.fallbackSystem.generateResponse(
+                'introduction',
+                { factType: 'general', value: input }
+            ).response;
+            await this.displayMessage(response);
+            
+            setTimeout(() => {
+                this.showNextFactPrompt();
+            }, 1500);
+        }
+    }
+
+    /**
+     * Show next fact collection prompt
+     */
+    showNextFactPrompt() {
+        if (this.dynamicFacts.factCounter >= 6) {
+            this.enterPhase('quiz');
+            return;
+        }
+        
+        // Generate dynamic prompt
+        const prompts = [
+            "What else would you like me to know about you?",
+            "Tell me about another aspect of your life.",
+            "What's something else that's important to you?",
+            "I'd love to hear more about you!",
+            "What's another interesting fact about yourself?"
+        ];
+        
+        const prompt = prompts[Math.floor(Math.random() * prompts.length)];
+        
+        // Show input interface
+        this.elements.inputLabel.textContent = prompt;
+        this.elements.textInput.placeholder = "Type your response here...";
+        this.elements.textInput.disabled = false;
+        this.elements.submitButton.disabled = false;
+        this.elements.textInputContainer.classList.remove('hidden');
+        this.elements.textInput.focus();
     }
     
     async loadDialogueData() {
@@ -460,27 +627,56 @@ class VisualNovelGame {
     hideAllInputs() {
         this.elements.textInputContainer.classList.add('hidden');
         this.elements.quizContainer.classList.add('hidden');
+        this.elements.userQuizContainer.classList.add('hidden');
+        this.elements.quizProgress.classList.add('hidden');
         this.elements.ratingContainer.classList.add('hidden');
         this.elements.continueContainer.classList.add('hidden');
     }
     
     async startIntroduction() {
+        // Generate and display initial greeting 
+        const greeting = await this.generateIntroductionGreeting();
+        await this.displayMessage(greeting);
+        
+        // Show first fact collection prompt
+        setTimeout(() => {
+            this.showNextFactPrompt();
+        }, 1500);
+    }
+    
+    async generateIntroductionGreeting() {
         try {
-            let greeting;
             if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                greeting = await this.generateLLMResponse('introduction', { 
-                    customPrompt: "Greet the user warmly and ask to learn about them. Be friendly and personable." 
-                });
+                const context = buildDynamicContext(
+                    this.state.dialogue,
+                    this.dynamicFacts.getAllFacts(),
+                    'introduction',
+                    this.dynamicFacts.factCounter
+                );
+                
+                const prompt = buildEnhancedCharacterPrompt(
+                    this.state.characterType,
+                    context,
+                    'introduction',
+                    { openQuestion: true, factCount: 0, previousFacts: 'None yet' }
+                );
+                
+                const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+                const parsed = parseEnhancedLLMResponse(response.content);
+                
+                this.state.lastLLMThought = parsed.thought;
+                if (this.state.debugMode) {
+                    this.updateDebugInfo();
+                }
+                
+                return parsed.response;
             } else {
-                greeting = window.fallbackSystem.generateResponse('introduction').response;
+                return window.fallbackSystem.generateResponse('introduction').response;
             }
-            await this.displayMessage(greeting);
         } catch (error) {
             console.error('Error generating greeting:', error);
-            const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
-            await this.displayMessage(fallbackGreeting);
+            return window.fallbackSystem.generateResponse('introduction').response;
         }
-        this.collectNextFact();
     }
     
     collectNextFact() {
@@ -505,42 +701,28 @@ class VisualNovelGame {
         const input = this.elements.textInput.value.trim();
         if (!input) return;
         
-        const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep];
-        this.state.playerFacts[factType] = input;
+        // Clear the input first
+        this.elements.textInput.value = '';
         
-        this.logEvent('fact_collected', {
-            factType: factType,
-            value: input,
-            step: this.state.currentStep
+        // Record fact in dynamic system
+        if (this.state.phase === 'introduction') {
+            const fact = this.dynamicFacts.recordFact(input);
+            this.logEvent('dynamic_fact_collected', {
+                factNumber: fact.factNumber,
+                content: fact.content,
+                category: fact.category,
+                memorable: fact.memorable
+            });
+        }
+        
+        // Process user input through conversation flow
+        this.conversationFlow.processUserInput('text', input);
+        
+        // Start agent turn for response
+        this.conversationFlow.startTurn('agent', {
+            userInput: input,
+            inputType: 'text'
         });
-        
-        // Generate appropriate response
-        this.elements.textInputContainer.classList.add('hidden');
-        
-        setTimeout(async () => {
-            try {
-                const response = await this.generateFactResponse(factType, input);
-                await this.displayMessage(response);
-                this.state.currentStep++;
-                
-                setTimeout(() => {
-                    this.collectNextFact();
-                }, 1000);
-            } catch (error) {
-                console.error('Error generating response:', error);
-                // Fallback to static response
-                const fallbackResponse = window.fallbackSystem.generateResponse('introduction', {
-                    factType: factType,
-                    value: input
-                });
-                await this.displayMessage(fallbackResponse.response);
-                this.state.currentStep++;
-                
-                setTimeout(() => {
-                    this.collectNextFact();
-                }, 1000);
-            }
-        }, this.getTypingDelay());
     }
     
     async generateFactResponse(factType, value) {
@@ -569,26 +751,32 @@ class VisualNovelGame {
     }
     
     /**
-     * Generate LLM response using prompt templates
+     * Generate LLM response using enhanced prompt templates
      */
     async generateLLMResponse(phase, context = {}) {
         try {
-            // Build context for the prompt
-            const dialogueContext = buildContext(
+            // Build context for enhanced prompts
+            const dialogueContext = buildDynamicContext(
                 this.state.dialogue,
-                this.state.playerFacts,
-                this.state.dialogue.length + 1,
-                this.state.characterType === 'B'
+                this.dynamicFacts.getAllFacts(),
+                phase,
+                this.dynamicFacts.factCounter,
+                context.wardenGuidance || ''
             );
             
-            // Build the complete prompt
-            const prompt = buildPrompt(this.state.characterType, phase, dialogueContext, context);
+            // Build the complete prompt using enhanced system
+            const prompt = buildEnhancedCharacterPrompt(
+                this.state.characterType, 
+                dialogueContext, 
+                phase, 
+                context
+            );
             
             // Make API request
             const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
             
-            // Parse response
-            const parsed = parseLLMResponse(response.content);
+            // Parse enhanced response
+            const parsed = parseEnhancedLLMResponse(response.content);
             
             // Update debug info
             this.state.lastLLMThought = parsed.thought;
@@ -607,24 +795,364 @@ class VisualNovelGame {
     }
     
     async startQuiz() {
+        // Initialize user-controlled quiz
+        this.userQuiz = new UserControlledQuiz(this.dynamicFacts, this);
+        this.userQuiz.initializeQuiz();
+        
+        // Show quiz intro message first
         try {
             let quizIntro;
             if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                quizIntro = await this.generateLLMResponse('quiz', { 
-                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-                });
+                const context = buildDynamicContext(
+                    this.state.dialogue,
+                    this.dynamicFacts.getAllFacts(),
+                    'transition_quiz',
+                    this.dynamicFacts.factCounter
+                );
+                
+                const prompt = buildEnhancedCharacterPrompt(
+                    this.state.characterType,
+                    context,
+                    'transition_quiz',
+                    { factsCollected: this.dynamicFacts.factCounter }
+                );
+                
+                const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+                const parsed = parseEnhancedLLMResponse(response.content);
+                
+                this.state.lastLLMThought = parsed.thought;
+                if (this.state.debugMode) {
+                    this.updateDebugInfo();
+                }
+                
+                quizIntro = parsed.response;
             } else {
-                quizIntro = window.fallbackSystem.generateResponse('quiz').response;
+                quizIntro = "I've learned so much about you! Would you like to test how well I remembered everything?";
             }
+            
             await this.displayMessage(quizIntro);
+            
+            // Show user-controlled quiz interface after message
+            setTimeout(() => {
+                this.showUserQuizInterface();
+            }, 2000);
+            
         } catch (error) {
             console.error('Error generating quiz intro:', error);
-            await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+            await this.displayMessage("I've learned so much about you! Would you like to test how well I remembered everything?");
+            setTimeout(() => {
+                this.showUserQuizInterface();
+            }, 2000);
+        }
+    }
+    
+    showUserQuizInterface() {
+        // Hide other containers
+        this.hideAllInputs();
+        
+        // Show user quiz container
+        this.elements.userQuizContainer.classList.remove('hidden');
+        
+        // Populate questions
+        this.populateQuizQuestions();
+        
+        // Update progress
+        this.updateProgressIndicator();
+    }
+    
+    populateQuizQuestions(filter = 'all') {
+        if (!this.userQuiz) return;
+        
+        const questions = this.userQuiz.filterQuestions(filter);
+        const container = this.elements.availableQuestions;
+        container.innerHTML = '';
+        
+        questions.forEach(question => {
+            const questionElement = this.createQuestionElement(question);
+            container.appendChild(questionElement);
+        });
+        
+        this.updateQuizControls();
+    }
+    
+    createQuestionElement(question) {
+        const element = document.createElement('div');
+        element.className = 'question-option';
+        element.dataset.questionId = question.id;
+        
+        const difficultyStars = '★'.repeat(Math.floor(question.difficulty || 1));
+        
+        element.innerHTML = `
+            <div class="question-content">
+                <div class="question-text">${question.text}</div>
+                <div class="question-meta">
+                    <span class="fact-number">Fact #${question.factNumber}</span>
+                    <span class="difficulty">${difficultyStars}</span>
+                    <span class="category">${question.category}</span>
+                </div>
+            </div>
+            <button class="select-question-btn" onclick="game.selectQuizQuestion('${question.id}')">
+                Select
+            </button>
+        `;
+        
+        return element;
+    }
+    
+    selectQuizQuestion(questionId) {
+        if (!this.userQuiz) return;
+        
+        this.userQuiz.selectQuestion(questionId);
+        this.updateQuestionUI(questionId);
+        this.updateQuizControls();
+    }
+    
+    updateQuestionUI(questionId) {
+        const element = document.querySelector(`[data-question-id="${questionId}"]`);
+        if (!element) return;
+
+        const isSelected = this.userQuiz.selectedQuestions.some(q => q.id === questionId);
+        const button = element.querySelector('.select-question-btn');
+        
+        if (isSelected) {
+            element.classList.add('selected');
+            button.textContent = 'Remove';
+            button.classList.add('remove');
+        } else {
+            element.classList.remove('selected');
+            button.textContent = 'Select';
+            button.classList.remove('remove');
+        }
+    }
+    
+    updateQuizControls() {
+        if (!this.userQuiz) return;
+        
+        const count = this.userQuiz.selectedQuestions.length;
+        this.elements.selectedCount.textContent = count;
+        this.elements.startQuizBtn.disabled = count === 0;
+    }
+    
+    handleCategoryFilter(button) {
+        // Update active filter
+        document.querySelectorAll('.category-filter').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        button.classList.add('active');
+        
+        // Repopulate questions
+        const category = button.dataset.category;
+        this.populateQuizQuestions(category);
+    }
+    
+    startUserControlledQuiz() {
+        if (!this.userQuiz || this.userQuiz.selectedQuestions.length === 0) {
+            alert('Please select at least one question to ask!');
+            return;
         }
         
-        // Generate quiz questions with options
-        this.prepareQuizQuestions();
-        this.showNextQuizQuestion();
+        // Hide user quiz interface
+        this.elements.userQuizContainer.classList.add('hidden');
+        
+        // Show progress bar
+        this.elements.quizProgress.classList.remove('hidden');
+        this.updateQuizProgress();
+        
+        // Start the quiz sequence
+        this.userQuiz.userAskedQuestions = [...this.userQuiz.selectedQuestions];
+        this.userQuiz.currentQuestionIndex = 0;
+        
+        // Let user ask first question
+        this.showNextUserQuestion();
+    }
+    
+    showNextUserQuestion() {
+        if (!this.userQuiz || this.userQuiz.isQuizComplete()) {
+            this.completeUserQuiz();
+            return;
+        }
+        
+        const question = this.userQuiz.getNextQuestion();
+        this.currentQuizQuestion = question;
+        
+        // Update progress
+        this.updateQuizProgress();
+        
+        // Show question interface
+        this.elements.quizContainer.classList.remove('hidden');
+        this.elements.quizQuestion.textContent = question.text;
+        this.elements.quizOptions.innerHTML = '';
+        
+        // Create "Ask this question" button
+        const askButton = document.createElement('button');
+        askButton.className = 'ask-question-btn';
+        askButton.textContent = 'Ask me this question';
+        askButton.addEventListener('click', () => this.askQuizQuestion(question));
+        this.elements.quizOptions.appendChild(askButton);
+    }
+    
+    async askQuizQuestion(question) {
+        // Hide ask button
+        this.elements.quizOptions.innerHTML = '';
+        
+        // Generate AI response to the question
+        try {
+            let response;
+            if (this.state.llmEnabled && window.apiConfig.isOnline) {
+                const availableFacts = this.getAvailableFactsForMemory();
+                const context = buildDynamicContext(
+                    this.state.dialogue,
+                    this.dynamicFacts.getAllFacts(),
+                    'quiz',
+                    this.dynamicFacts.factCounter
+                );
+                
+                const prompt = buildEnhancedCharacterPrompt(
+                    this.state.characterType,
+                    context,
+                    'quiz',
+                    { 
+                        question: question.text,
+                        availableFacts: availableFacts
+                    }
+                );
+                
+                const llmResponse = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+                const parsed = parseEnhancedLLMResponse(llmResponse.content);
+                
+                this.state.lastLLMThought = parsed.thought;
+                if (this.state.debugMode) {
+                    this.updateDebugInfo();
+                }
+                
+                response = parsed.response;
+            } else {
+                response = this.generateFallbackQuizResponse(question);
+            }
+            
+            // Display AI response
+            await this.displayMessage(response);
+            
+            // Log the quiz interaction
+            this.logQuizInteraction(question, response);
+            
+            // Continue to next question after delay
+            setTimeout(() => {
+                this.elements.quizContainer.classList.add('hidden');
+                setTimeout(() => {
+                    this.showNextUserQuestion();
+                }, 1000);
+            }, 3000);
+            
+        } catch (error) {
+            console.error('Error generating quiz response:', error);
+            const fallbackResponse = this.generateFallbackQuizResponse(question);
+            await this.displayMessage(fallbackResponse);
+            
+            setTimeout(() => {
+                this.elements.quizContainer.classList.add('hidden');
+                setTimeout(() => {
+                    this.showNextUserQuestion();
+                }, 1000);
+            }, 3000);
+        }
+    }
+    
+    getAvailableFactsForMemory() {
+        const facts = this.dynamicFacts.getAllFacts();
+        if (this.state.characterType === 'A') {
+            // Perfect memory - return all facts
+            return facts.map(f => `Fact ${f.factNumber}: ${f.content}`).join('\n');
+        } else {
+            // Impaired memory - return filtered facts
+            const availableFacts = this.dynamicFacts.exportForMemoryTest(true);
+            return availableFacts.map(f => 
+                f.distorted ? 
+                `Fact ${f.factNumber}: ${f.content} (uncertain)` :
+                `Fact ${f.factNumber}: ${f.content}`
+            ).join('\n');
+        }
+    }
+    
+    generateFallbackQuizResponse(question) {
+        const fact = this.dynamicFacts.getFact(question.factNumber);
+        if (!fact) {
+            return "I'm having trouble remembering that specific detail.";
+        }
+        
+        if (this.state.characterType === 'A') {
+            // Perfect memory
+            return fact.content;
+        } else {
+            // Impaired memory - apply forgetting patterns
+            if (Math.random() < 0.4) { // 40% chance of error
+                if (Math.random() < 0.5) {
+                    // Confident wrong
+                    return this.generateConfidentWrongAnswer(fact);
+                } else {
+                    // Fuzzy recall
+                    return this.generateFuzzyAnswer(fact);
+                }
+            } else {
+                // Correct recall
+                return fact.content;
+            }
+        }
+    }
+    
+    generateConfidentWrongAnswer(fact) {
+        const wrongAnswers = {
+            'hobby': ['reading', 'gaming', 'cooking', 'hiking'],
+            'food': ['pizza', 'sushi', 'pasta', 'burgers'],
+            'profession': ['teacher', 'engineer', 'doctor', 'artist'],
+            'general': ['traveling', 'music', 'photography', 'writing']
+        };
+        
+        const options = wrongAnswers[fact.category] || wrongAnswers.general;
+        const wrongAnswer = options[Math.floor(Math.random() * options.length)];
+        return `You mentioned you love ${wrongAnswer}!`;
+    }
+    
+    generateFuzzyAnswer(fact) {
+        const fuzzyPatterns = [
+            `I think you said something about... ${fact.content.split(' ')[0]}... or was it something similar?`,
+            `If I remember correctly, you mentioned... hmm, was it ${fact.content.slice(0, 10)}...?`,
+            `You told me about... let me think... something like ${fact.content.split(' ').slice(0, 2).join(' ')}?`
+        ];
+        
+        return fuzzyPatterns[Math.floor(Math.random() * fuzzyPatterns.length)];
+    }
+    
+    logQuizInteraction(question, response) {
+        this.logEvent('user_controlled_quiz_interaction', {
+            questionId: question.id,
+            questionText: question.text,
+            factNumber: question.factNumber,
+            expectedAnswer: question.expectedAnswer,
+            aiResponse: response,
+            characterType: this.state.characterType,
+            timestamp: Date.now()
+        });
+    }
+    
+    updateQuizProgress() {
+        if (!this.userQuiz) return;
+        
+        const progress = this.userQuiz.getProgress();
+        this.elements.currentQuestion.textContent = progress.current;
+        this.elements.totalQuestions.textContent = progress.total;
+        
+        const percentage = progress.percentage;
+        this.elements.quizProgressFill.style.width = `${percentage}%`;
+    }
+    
+    completeUserQuiz() {
+        // Hide quiz elements
+        this.elements.quizContainer.classList.add('hidden');
+        this.elements.quizProgress.classList.add('hidden');
+        
+        // Transition to rating phase
+        this.enterPhase('rating');
     }
     
     prepareQuizQuestions() {

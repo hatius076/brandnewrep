@@ -42,6 +42,41 @@
                     <div id="quiz-options"></div>
                 </div>
 
+                <!-- User-Controlled Quiz Interface -->
+                <div id="user-quiz-container" class="hidden">
+                    <div class="quiz-intro">
+                        <h3>Test my memory! Pick questions to ask me:</h3>
+                        <p>Choose which facts you'd like me to try to remember from our conversation.</p>
+                    </div>
+                    
+                    <div class="question-selection">
+                        <div class="question-categories">
+                            <button class="category-filter active" data-category="all">All Questions</button>
+                            <button class="category-filter" data-category="recent">Recent Facts</button>
+                            <button class="category-filter" data-category="important">Most Important</button>
+                        </div>
+                        
+                        <div class="available-questions" id="available-questions">
+                            <!-- Questions will be populated dynamically -->
+                        </div>
+                    </div>
+                    
+                    <div class="quiz-controls">
+                        <div class="selected-count">Selected: <span id="selected-count">0</span> questions</div>
+                        <button id="start-quiz-btn" class="start-quiz-btn" disabled>Start Memory Test</button>
+                    </div>
+                </div>
+
+                <!-- Quiz Progress Display -->
+                <div id="quiz-progress" class="hidden">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="quiz-progress-fill"></div>
+                    </div>
+                    <div class="progress-text">
+                        Question <span id="current-question">1</span> of <span id="total-questions">1</span>
+                    </div>
+                </div>
+
                 <!-- Rating Scales -->
                 <div id="rating-container" class="hidden">
                     <div id="rating-question"></div>
@@ -162,6 +197,11 @@
     <script src="config/flags.js"></script>
     <script src="config/api.js"></script>
     <script src="prompts/templates.js"></script>
+    <script src="prompts/warden-templates.js"></script>
+    <script src="warden/overseer.js"></script>
+    <script src="memory/dynamic-facts.js"></script>
+    <script src="quiz/user-controlled.js"></script>
+    <script src="ui/conversation-flow.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
