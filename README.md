@@ -55,6 +55,16 @@ Users interact with one randomly assigned character through a structured convers
    - Ensure you have available credits/usage quota
 
 2. **Configure API Access**:
+   
+   **Option A: Using .env file (Recommended for development)**:
+   - Add your API key to the `.env` file in the project root:
+     ```
+     OPENAI_API_KEY=your_api_key_here
+     ```
+   - The application will automatically load the key on startup
+   - No manual configuration needed in the UI
+   
+   **Option B: Manual entry via Settings UI**:
    - Open the application in your browser
    - Click the **⚙️ Settings** button in the header
    - Enter your OpenAI API key in the provided field
@@ -63,7 +73,8 @@ Users interact with one randomly assigned character through a structured convers
    - Click **Save Settings**
 
 3. **Security Notice**: 
-   - ⚠️ Your API key is stored locally in your browser
+   - ⚠️ API keys are automatically loaded from `.env` file when available
+   - Fallback to browser localStorage for manual entry
    - Keys are sent directly to OpenAI (client-side only)
    - Never share your API key or use on untrusted devices
    - Consider using a separate API key for research purposes
