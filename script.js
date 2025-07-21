@@ -651,23 +651,14 @@ Respond with just the question, no additional text.`;
             try {
                 return await this.generateDynamicResponse(value);
             } catch (error) {
-                console.warn('LLM request failed, falling back to static response:', error);
-                // Fall through to static response
+                console.warn('LLM request failed, falling back to contextual response:', error);
+                // Fall through to improved fallback response
             }
         }
         
-        // Fallback to static responses
-        const responses = {
-            name: [`Nice to meet you, ${value}!`, `Great, ${value} is a lovely name!`, `Thanks for sharing, ${value}!`],
-            favFood: [`${value} sounds delicious!`, `I bet ${value} is really tasty!`, `Interesting choice with ${value}!`],
-            favHobby: [`${value} sounds like a fun hobby!`, `That's cool that you enjoy ${value}!`, `${value} must be really enjoyable!`],
-            favRelaxPlace: [`${value} sounds like a peaceful place!`, `That sounds like a great spot to unwind!`, `I can imagine ${value} being very relaxing!`],
-            profession: [`That's interesting work!`, `Sounds like a meaningful profession!`, `Your work must be quite engaging!`],
-            bonusFact: [`That's really interesting!`, `What a cool fact about yourself!`, `Thanks for sharing that with me!`]
-        };
-        
-        const options = responses[factType] || ['Thanks for sharing that!'];
-        return options[Math.floor(Math.random() * options.length)];
+        // Use improved contextual fallback response instead of old factType templates
+        window.fallbackSystem.updateConversationHistory(value);
+        return window.fallbackSystem.generateContextualResponse(value, this.state.currentStep);
     }
     
     /**
