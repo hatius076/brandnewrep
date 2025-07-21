@@ -246,6 +246,23 @@ class FallbackResponseSystem {
                     "Hi there! I'm an AI that enjoys getting to know people. I hope you don't mind if I ask you a few questions about yourself so I can better understand who you are.",
                     "Welcome! I'm an AI assistant, and I find that conversations are much more engaging when I know something about the person I'm talking with. Would you mind sharing some details about yourself?"
                 ],
+                // More natural, open-ended questions
+                openQuestions: [
+                    "Tell me about yourself! What's something interesting you'd like to share?",
+                    "What's something you're passionate about?",
+                    "I'd love to get to know you better. What's been the highlight of your day so far?",
+                    "What's something that makes you happy?",
+                    "Tell me about something you really enjoy doing.",
+                    "What's something important to you in your life?"
+                ],
+                followUpQuestions: [
+                    "That's fascinating! What else would you like me to know about you?",
+                    "I love hearing about that! What's another aspect of your life you'd like to share?",
+                    "That sounds wonderful! Tell me about something else that's meaningful to you.",
+                    "That's really interesting! What else makes you who you are?",
+                    "I can tell that's important to you! What's something else you'd like me to know?",
+                    "That's great! What other things do you enjoy or care about?"
+                ],
                 factResponse: {
                     name: ["Nice to meet you, {value}!", "Great, {value} is a lovely name!", "Thanks for sharing, {value}!"],
                     favFood: ["{value} sounds delicious!", "I bet {value} is really tasty!", "Interesting choice with {value}!"],
@@ -263,6 +280,9 @@ class FallbackResponseSystem {
                 impaired: "Thank you for this wonderful conversation, {name}! I hope I got most of the details about you right - sometimes I have trouble remembering everything perfectly. I hope you enjoyed our chat as much as I did!"
             }
         };
+        
+        this.conversationHistory = [];
+        this.factsCollected = 0;
     }
 
     /**
@@ -316,6 +336,72 @@ class FallbackResponseSystem {
         });
         
         return response;
+    }
+
+    /**
+     * Generate a natural fallback question for fact collection
+     */
+    generateFallbackQuestion(factNumber = 0, previousUserResponse = null) {
+        if (factNumber === 0) {
+            // First question - open-ended
+            return this.getRandomResponse(this.responses.introduction.openQuestions);
+        } else {
+            // Follow-up questions that feel natural
+            return this.getRandomResponse(this.responses.introduction.followUpQuestions);
+        }
+    }
+
+    /**
+     * Generate contextual response to user input without knowing fact type
+     */
+    generateContextualResponse(userInput, factNumber = 0) {
+        // Different response types based on what the user shared
+        const input = userInput.toLowerCase();
+        let responses = [];
+        
+        // Try to categorize response based on content
+        if (input.includes('love') || input.includes('passion') || input.includes('enjoy')) {
+            responses = [
+                "That's wonderful! I can tell you're really passionate about that.",
+                "That sounds amazing! It's great when you find something you truly love.",
+                "How exciting! I love hearing about what brings people joy.",
+                "That's fantastic! Your enthusiasm really comes through."
+            ];
+        } else if (input.includes('work') || input.includes('job') || input.includes('career')) {
+            responses = [
+                "That sounds like interesting work!",
+                "Your job must be quite engaging!",
+                "That's a meaningful profession!",
+                "It sounds like you have a fulfilling career."
+            ];
+        } else if (input.includes('family') || input.includes('friend') || input.includes('people')) {
+            responses = [
+                "It sounds like you have wonderful people in your life!",
+                "That's lovely! Relationships are so important.",
+                "What a blessing to have such great people around you!",
+                "It's clear that your relationships mean a lot to you."
+            ];
+        } else {
+            // General positive responses
+            responses = [
+                "That's really interesting! Thanks for sharing that with me.",
+                "I'm glad you told me about that! I love learning about people.",
+                "That sounds wonderful! I appreciate you opening up.",
+                "That's great to know! You seem like a fascinating person.",
+                "How lovely! Thanks for letting me get to know you better.",
+                "That's fantastic! I enjoy hearing about what makes you unique."
+            ];
+        }
+        
+        return this.getRandomResponse(responses);
+    }
+
+    /**
+     * Update internal conversation tracking for better responses
+     */
+    updateConversationHistory(userInput) {
+        this.conversationHistory.push(userInput);
+        this.factsCollected++;
     }
 
     getRandomResponse(responses) {
