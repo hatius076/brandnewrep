@@ -73,6 +73,12 @@
             <div id="completion-status"></div>
         </footer>
 
+        <!-- Key Management Controls -->
+        <div id="key-controls" style="position: fixed; top: 10px; right: 10px; z-index: 1000;">
+            <button id="clear-key-btn" style="margin-right: 5px;">Clear Stored Key</button>
+            <button id="test-key-btn">Test API Key</button>
+        </div>
+
         <!-- Data Export (Hidden) -->
         <div id="data-export" class="hidden">
             <h3>Session Complete</h3>
@@ -111,13 +117,6 @@
                         <label>
                             <input type="checkbox" id="debug-mode" />
                             Debug Mode (Show AI thoughts)
-                        </label>
-                    </div>
-
-                    <div class="setting-group">
-                        <label>
-                            <input type="checkbox" id="offline-mode" />
-                            Offline Mode (Use fallback responses)
                         </label>
                     </div>
 

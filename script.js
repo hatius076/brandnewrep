@@ -27,8 +27,7 @@ class VisualNovelGame {
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
-        this.initializeLLMSystem();
-        this.startGame();
+        this.initializeGame();
     }
     
     generateSessionId() {
@@ -74,7 +73,6 @@ class VisualNovelGame {
             apiKeyInput: document.getElementById('api-key-input'),
             modelSelect: document.getElementById('model-select'),
             debugModeCheckbox: document.getElementById('debug-mode'),
-            offlineModeCheckbox: document.getElementById('offline-mode'),
             statusIndicator: document.getElementById('status-indicator'),
             usageStats: document.getElementById('usage-stats'),
             requestCount: document.getElementById('request-count'),
@@ -87,7 +85,11 @@ class VisualNovelGame {
             debugThought: document.getElementById('debug-thought'),
             debugCharacter: document.getElementById('debug-character'),
             debugMemory: document.getElementById('debug-memory'),
-            toggleDebug: document.getElementById('toggle-debug')
+            toggleDebug: document.getElementById('toggle-debug'),
+            
+            // Key management controls
+            clearKeyBtn: document.getElementById('clear-key-btn'),
+            testKeyBtn: document.getElementById('test-key-btn')
         };
     }
     
@@ -126,7 +128,10 @@ class VisualNovelGame {
         this.elements.saveSettingsButton.addEventListener('click', () => this.saveSettings());
         this.elements.clearSettingsButton.addEventListener('click', () => this.clearSettings());
         this.elements.debugModeCheckbox.addEventListener('change', () => this.toggleDebugMode());
-        this.elements.offlineModeCheckbox.addEventListener('change', () => this.toggleOfflineMode());
+        
+        // Key management controls
+        this.elements.clearKeyBtn.addEventListener('click', () => this.clearStoredKey());
+        this.elements.testKeyBtn.addEventListener('click', () => this.testStoredApiKey());
         
         // Debug panel
         this.elements.toggleDebug.addEventListener('click', () => this.toggleDebugPanel());
@@ -157,19 +162,80 @@ class VisualNovelGame {
     }
     
     /**
-     * Initialize LLM system and load settings
+     * Initialize game with auto-loaded API key
      */
-    initializeLLMSystem() {
-        // Check if API is configured
-        this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
+    async initializeGame() {
+        // Try to load existing key
+        const hasStoredKey = window.apiConfig.keyManager.hasKey();
         
-        // Load saved settings
-        this.loadLLMSettings();
-        
-        // Update debug info
-        this.updateDebugInfo();
+        if (!hasStoredKey) {
+            // First time setup - prompt for key once
+            await this.promptForAPIKey();
+        } else {
+            // Test the stored key
+            const isValid = await window.apiConfig.testStoredKey();
+            if (!isValid) {
+                console.log('Stored API key is invalid, requesting new one...');
+                await this.promptForAPIKey();
+            } else {
+                console.log('Using stored API key');
+                this.state.llmEnabled = true;
+                this.updateDebugInfo();
+                this.startGame();
+            }
+        }
     }
     
+    /**
+     * Prompt for API key on first use
+     */
+    async promptForAPIKey() {
+        const keyInput = prompt('Enter your OpenAI API key (will be encrypted and stored locally):');
+        if (keyInput && keyInput.trim()) {
+            const apiKey = keyInput.trim();
+            
+            // Test the key
+            const isValid = await window.apiConfig.setApiKey(apiKey);
+            if (isValid) {
+                console.log('API key validated and stored');
+                this.state.llmEnabled = true;
+                this.updateDebugInfo();
+                this.startGame();
+            } else {
+                alert('Invalid API key. Please try again.');
+                await this.promptForAPIKey();
+            }
+        } else {
+            alert('API key is required for operation.');
+            await this.promptForAPIKey();
+        }
+    }
+    
+    /**
+     * Clear stored API key
+     */
+    clearStoredKey() {
+        if (confirm('Clear stored API key? You will need to re-enter it.')) {
+            window.apiConfig.clearConfig();
+            location.reload();
+        }
+    }
+    
+    /**
+     * Test stored API key
+     */
+    async testStoredApiKey() {
+        try {
+            const isValid = await window.apiConfig.testStoredKey();
+            if (isValid) {
+                alert('API key is working!');
+            } else {
+                alert('API key test failed. Please check your key.');
+            }
+        } catch (error) {
+            alert('API key test failed: ' + error.message);
+        }
+    }
     /**
      * Load LLM settings from storage and update UI
      */
@@ -180,7 +246,6 @@ class VisualNovelGame {
                 const settings = JSON.parse(saved);
                 this.state.debugMode = settings.debugMode || false;
                 this.elements.debugModeCheckbox.checked = this.state.debugMode;
-                this.elements.offlineModeCheckbox.checked = settings.offlineMode || false;
             }
         } catch (error) {
             console.warn('Failed to load LLM UI settings:', error);
@@ -227,7 +292,7 @@ class VisualNovelGame {
         
         try {
             const isValid = await window.apiConfig.setApiKey(apiKey);
-            this.state.llmEnabled = isValid && !this.elements.offlineModeCheckbox.checked;
+            this.state.llmEnabled = isValid;
             this.updateApiStatus();
             
             if (isValid) {
@@ -251,7 +316,6 @@ class VisualNovelGame {
         const apiKey = this.elements.apiKeyInput.value.trim();
         const model = this.elements.modelSelect.value;
         const debugMode = this.elements.debugModeCheckbox.checked;
-        const offlineMode = this.elements.offlineModeCheckbox.checked;
         
         // Save API config
         if (apiKey && !apiKey.includes('...')) {
@@ -261,12 +325,12 @@ class VisualNovelGame {
         window.apiConfig.saveConfig();
         
         // Save UI settings
-        const uiSettings = { debugMode, offlineMode };
+        const uiSettings = { debugMode };
         localStorage.setItem('llm_ui_settings', JSON.stringify(uiSettings));
         
         // Update state
         this.state.debugMode = debugMode;
-        this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
+        this.state.llmEnabled = window.apiConfig.isOnline;
         
         this.updateApiStatus();
         this.updateDebugInfo();
@@ -291,7 +355,6 @@ class VisualNovelGame {
             this.elements.apiKeyInput.value = '';
             this.elements.modelSelect.value = 'gpt-4';
             this.elements.debugModeCheckbox.checked = false;
-            this.elements.offlineModeCheckbox.checked = false;
             
             this.state.llmEnabled = false;
             this.state.debugMode = false;
@@ -313,15 +376,6 @@ class VisualNovelGame {
             this.elements.debugPanel.classList.add('hidden');
         }
         this.updateDebugInfo();
-    }
-    
-    /**
-     * Toggle offline mode
-     */
-    toggleOfflineMode() {
-        const offlineMode = this.elements.offlineModeCheckbox.checked;
-        this.state.llmEnabled = window.apiConfig.isOnline && !offlineMode;
-        this.updateApiStatus();
     }
     
     /**
@@ -347,10 +401,7 @@ class VisualNovelGame {
         let status = 'Not configured';
         let className = 'offline';
         
-        if (this.elements.offlineModeCheckbox.checked) {
-            status = 'Offline mode';
-            className = 'offline';
-        } else if (window.apiConfig.isOnline) {
+        if (window.apiConfig.isOnline) {
             status = 'Online';
             className = 'online';
         } else if (window.apiConfig.isConfigured()) {
@@ -466,17 +517,12 @@ class VisualNovelGame {
     
     async startIntroduction() {
         try {
-            let greeting;
-            if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                greeting = await this.generateDynamicGreeting();
-            } else {
-                greeting = window.fallbackSystem.generateResponse('introduction').response;
-            }
+            const greeting = await this.generateDynamicGreeting();
             await this.displayMessage(greeting);
         } catch (error) {
             console.error('Error generating greeting:', error);
-            const fallbackGreeting = window.fallbackSystem.generateResponse('introduction').response;
-            await this.displayMessage(fallbackGreeting);
+            // Show error instead of fallback
+            throw new Error('AI service unavailable. Please check your connection and API key.');
         }
         
         // Start dynamic conversation flow
@@ -524,14 +570,13 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
             return;
         }
         
-        // Generate dynamic question using LLM or fall back to static
+        // Generate dynamic question using LLM
         let prompt;
         try {
             prompt = await this.generateDynamicQuestion();
         } catch (error) {
-            console.warn('Dynamic question generation failed, using fallback:', error);
-            const currentFactType = factTypes[this.state.currentStep];
-            prompt = this.dialogueData.introduction.factPrompts[currentFactType];
+            console.error('Dynamic question generation failed:', error);
+            throw new Error('AI service unavailable. Please check your connection and API key.');
         }
         
         this.elements.inputLabel.textContent = prompt;
@@ -546,11 +591,7 @@ Be warm, genuine, and engaging. Respond with just the greeting, no additional te
      */
     async generateDynamicQuestion() {
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            // Use improved fallback questions instead of static fact-based ones
-            return window.fallbackSystem.generateFallbackQuestion(
-                this.state.currentStep,
-                this.state.dialogue[this.state.dialogue.length - 1]?.text
-            );
+            throw new Error('No API key available');
         }
         
         // Build context for question generation
@@ -621,7 +662,7 @@ Respond with just the question, no additional text.`;
         
         setTimeout(async () => {
             try {
-                const response = await this.generateFactResponse(factType, input);
+                const response = await this.generateDynamicResponse(input);
                 await this.displayMessage(response);
                 this.state.currentStep++;
                 
@@ -630,35 +671,14 @@ Respond with just the question, no additional text.`;
                 }, 1000);
             } catch (error) {
                 console.error('Error generating response:', error);
-                // Fallback to static response
-                const fallbackResponse = window.fallbackSystem.generateResponse('introduction', {
-                    factType: factType,
-                    value: input
-                });
-                await this.displayMessage(fallbackResponse.response);
-                this.state.currentStep++;
-                
-                setTimeout(() => {
-                    this.collectNextFact();
-                }, 1000);
+                throw new Error('AI service unavailable. Please check your connection and API key.');
             }
         }, this.getTypingDelay());
     }
     
     async generateFactResponse(factType, value) {
-        // Use LLM if enabled and available
-        if (this.state.llmEnabled && window.apiConfig.isOnline) {
-            try {
-                return await this.generateDynamicResponse(value);
-            } catch (error) {
-                console.warn('LLM request failed, falling back to contextual response:', error);
-                // Fall through to improved fallback response
-            }
-        }
-        
-        // Use improved contextual fallback response instead of old factType templates
-        window.fallbackSystem.updateConversationHistory(value);
-        return window.fallbackSystem.generateContextualResponse(value, this.state.currentStep);
+        // Always use LLM - no fallback
+        return await this.generateDynamicResponse(value);
     }
     
     /**
@@ -666,9 +686,7 @@ Respond with just the question, no additional text.`;
      */
     async generateDynamicResponse(userInput) {
         if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            // Use improved fallback responses
-            window.fallbackSystem.updateConversationHistory(userInput);
-            return window.fallbackSystem.generateContextualResponse(userInput, this.state.currentStep);
+            throw new Error('No API key available');
         }
         
         const conversationHistory = this.state.dialogue.slice(-2); // Last 2 exchanges for context
@@ -746,18 +764,13 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startQuiz() {
         try {
-            let quizIntro;
-            if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                quizIntro = await this.generateLLMResponse('quiz', { 
-                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-                });
-            } else {
-                quizIntro = window.fallbackSystem.generateResponse('quiz').response;
-            }
+            const quizIntro = await this.generateLLMResponse('quiz', { 
+                customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
+            });
             await this.displayMessage(quizIntro);
         } catch (error) {
             console.error('Error generating quiz intro:', error);
-            await this.displayMessage("Now I'd like to test my memory of what you've told me. Let me see how well I remember our conversation!");
+            throw new Error('AI service unavailable. Please check your connection and API key.');
         }
         
         // Generate quiz questions with options
@@ -911,23 +924,14 @@ Keep it conversational and authentic. Be brief but warm.`;
     
     async startRating() {
         try {
-            let outroMessage;
-            if (this.state.llmEnabled && window.apiConfig.isOnline) {
-                outroMessage = await this.generateLLMResponse('outro', {
-                    facts: this.state.playerFacts,
-                    memoryImpaired: this.state.characterType === 'B'
-                });
-            } else {
-                outroMessage = window.fallbackSystem.generateResponse('outro', {
-                    facts: this.state.playerFacts,
-                    memoryImpaired: this.state.characterType === 'B'
-                }).response;
-            }
+            const outroMessage = await this.generateLLMResponse('outro', {
+                facts: this.state.playerFacts,
+                memoryImpaired: this.state.characterType === 'B'
+            });
             await this.displayMessage(outroMessage);
         } catch (error) {
             console.error('Error generating outro:', error);
-            const fallbackOutro = this.generatePersonalizedOutro();
-            await this.displayMessage(fallbackOutro);
+            throw new Error('AI service unavailable. Please check your connection and API key.');
         }
         
         setTimeout(() => {
@@ -1111,7 +1115,7 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
 }
 
-// Initialize game when page loads
-document.addEventListener('DOMContentLoaded', () => {
+// Auto-initialize game when page loads with API key management
+document.addEventListener('DOMContentLoaded', async () => {
     window.game = new VisualNovelGame();
 });
