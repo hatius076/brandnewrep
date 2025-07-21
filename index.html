@@ -93,9 +93,10 @@
                         <label for="api-key-input">OpenAI API Key:</label>
                         <input type="password" id="api-key-input" placeholder="sk-..." />
                         <div class="setting-help">
-                            ⚠️ <strong>Security Notice:</strong> Your API key is stored locally in your browser and sent directly to OpenAI. 
-                            Never share your API key or use it on untrusted devices.
+                            ⚠️ <strong>Security Notice:</strong> API keys can be loaded from the .env file or stored locally in your browser and sent directly to OpenAI. 
+                            Keys from .env file take precedence over localStorage. Never share your API key or use it on untrusted devices.
                         </div>
+                        <div id="api-key-source" class="setting-info"></div>
                     </div>
 
                     <div class="setting-group">
@@ -160,6 +161,7 @@
 
     <!-- Load JavaScript -->
     <script src="config/flags.js"></script>
+    <script src="config/env-loader.js"></script>
     <script src="config/api.js"></script>
     <script src="prompts/templates.js"></script>
     <script src="script.js"></script>

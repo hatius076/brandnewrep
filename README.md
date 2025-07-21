@@ -55,16 +55,26 @@ Users interact with one randomly assigned character through a structured convers
    - Ensure you have available credits/usage quota
 
 2. **Configure API Access**:
+   
+   **Option 1: .env File (Recommended for deployment)**:
+   - Edit the `.env` file in the project root
+   - Set `OPENAI_API_KEY=your-api-key-here`
+   - The application will automatically load it on startup
+   
+   **Option 2: Settings UI**:
    - Open the application in your browser
    - Click the **⚙️ Settings** button in the header
    - Enter your OpenAI API key in the provided field
    - Select your preferred model (GPT-4 recommended)
    - Click **Test API** to verify connection
    - Click **Save Settings**
+   
+   **Precedence**: .env file takes priority over localStorage settings.
 
 3. **Security Notice**: 
-   - ⚠️ Your API key is stored locally in your browser
+   - ⚠️ API keys can be loaded from .env file or stored locally in browser
    - Keys are sent directly to OpenAI (client-side only)
+   - .env file method is preferred for deployment and security
    - Never share your API key or use on untrusted devices
    - Consider using a separate API key for research purposes
 
@@ -95,8 +105,9 @@ Users interact with one randomly assigned character through a structured convers
 ├── style.css           # Responsive styling and layout
 ├── script.js           # Enhanced game engine with LLM integration
 ├── config/
-│   ├── flags.js        # Configuration and randomization
-│   └── api.js          # 🆕 LLM API client and management
+│   ├── flags.js         # Configuration and randomization
+│   ├── env-loader.js    # 🆕 Environment variable loader for .env support
+│   └── api.js           # 🆕 LLM API client and management
 ├── prompts/
 │   ├── templates.js    # 🆕 LLM prompt templates and parsing
 │   ├── companion_A.txt # Perfect memory character profile

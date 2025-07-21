@@ -27,8 +27,10 @@ class VisualNovelGame {
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
-        this.initializeLLMSystem();
-        this.startGame();
+        // Make initializeLLMSystem async
+        this.initializeLLMSystem().then(() => {
+            this.startGame();
+        });
     }
     
     generateSessionId() {
@@ -72,6 +74,7 @@ class VisualNovelGame {
             settingsModal: document.getElementById('settings-modal'),
             closeSettings: document.getElementById('close-settings'),
             apiKeyInput: document.getElementById('api-key-input'),
+            apiKeySource: document.getElementById('api-key-source'),
             modelSelect: document.getElementById('model-select'),
             debugModeCheckbox: document.getElementById('debug-mode'),
             offlineModeCheckbox: document.getElementById('offline-mode'),
@@ -159,7 +162,12 @@ class VisualNovelGame {
     /**
      * Initialize LLM system and load settings
      */
-    initializeLLMSystem() {
+    async initializeLLMSystem() {
+        // Wait for API config to initialize (including .env loading)
+        if (window.apiConfig && window.apiConfig.initPromise) {
+            await window.apiConfig.initPromise;
+        }
+        
         // Check if API is configured
         this.state.llmEnabled = window.apiConfig.isConfigured() && window.apiConfig.isOnline;
         
@@ -188,11 +196,12 @@ class VisualNovelGame {
         
         // Update UI with current API config
         if (window.apiConfig.isConfigured()) {
-            this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey();
+            this.elements.apiKeyInput.value = window.apiConfig.getMaskedApiKey().split(' (')[0]; // Just the masked key without source
             this.elements.modelSelect.value = window.apiConfig.model;
         }
         
         this.updateApiStatus();
+        this.updateApiKeySourceDisplay();
     }
     
     /**
@@ -201,7 +210,25 @@ class VisualNovelGame {
     openSettingsModal() {
         this.elements.settingsModal.classList.remove('hidden');
         this.updateApiStatus();
+        this.updateApiKeySourceDisplay();
         this.updateUsageStats();
+    }
+    
+    /**
+     * Update API key source display
+     */
+    updateApiKeySourceDisplay() {
+        const source = window.apiConfig.getApiKeySource();
+        if (source) {
+            const sourceText = source === 'env' ? 
+                '✅ API key loaded from .env file' : 
+                'ℹ️ API key from localStorage (manual entry)';
+            this.elements.apiKeySource.textContent = sourceText;
+            this.elements.apiKeySource.className = `setting-info ${source}`;
+        } else {
+            this.elements.apiKeySource.textContent = '';
+            this.elements.apiKeySource.className = 'setting-info';
+        }
     }
     
     /**
@@ -270,6 +297,7 @@ class VisualNovelGame {
         
         this.updateApiStatus();
         this.updateDebugInfo();
+        this.updateApiKeySourceDisplay();
         this.closeSettingsModal();
         
         // Show/hide debug panel
@@ -298,6 +326,7 @@ class VisualNovelGame {
             
             this.updateApiStatus();
             this.updateDebugInfo();
+            this.updateApiKeySourceDisplay();
             this.elements.debugPanel.classList.add('hidden');
         }
     }
