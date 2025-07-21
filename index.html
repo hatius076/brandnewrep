@@ -25,6 +25,21 @@
                 <div id="character-name">AI Assistant</div>
                 <div id="dialogue-text"></div>
                 <div id="typing-indicator" class="hidden">...</div>
+                
+                <!-- Enhanced Loading Animation -->
+                <div id="loading-animation" class="hidden">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">AI is thinking...</div>
+                </div>
+                
+                <!-- Enhanced Debug Thoughts Display -->
+                <div id="thought-display" class="hidden">
+                    <div class="thought-header">
+                        <span class="thought-label">[THOUGHT]</span>
+                        <button id="toggle-thought" class="thought-toggle">−</button>
+                    </div>
+                    <div id="thought-content" class="thought-content"></div>
+                </div>
             </section>
 
             <!-- Input Section -->
@@ -70,7 +85,14 @@
         <!-- Footer -->
         <footer id="game-footer">
             <button id="restart-button" class="hidden">Start New Session</button>
+            <button id="continue-to-agent-b" class="hidden">Continue to Agent B</button>
             <div id="completion-status"></div>
+            <div id="agent-progress">
+                <span id="agent-indicator">Agent A</span>
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+            </div>
         </footer>
 
         <!-- Data Export (Hidden) -->
