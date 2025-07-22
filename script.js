@@ -24,6 +24,12 @@ class VisualNovelGame {
             debugMode: false,
             lastLLMThought: '',
             
+            // New quiz state for fixed 4-turn system
+            quizTurnCount: 0,
+            maxQuizTurns: 4,
+            usedFactTypes: new Set(), // Track which fact types have been questioned
+            agentBErrorSchedule: [], // Pre-assigned error turns for Agent B
+            
             // Dual-agent session storage
             sessionRecords: {
                 agentA: {
@@ -692,6 +698,11 @@ class VisualNovelGame {
         this.state.ratings = {};
         this.state.memoryErrors = 0;
         
+        // Reset quiz state for new agent - re-enable all fact type buttons
+        this.state.quizTurnCount = 0;
+        this.state.usedFactTypes.clear();
+        this.state.agentBErrorSchedule = [];
+        
         // Keep player facts but don't reset them
         // Agent B will have memory impairment during conversations
         
@@ -1257,11 +1268,51 @@ Keep it conversational and authentic. Be brief but warm.`;
             await this.displayMessage(fallbackIntro);
         }
         
+        // Reset quiz state for new session
+        this.state.quizTurnCount = 0;
+        this.state.usedFactTypes.clear();
+        
+        // Pre-assign Agent B error states for deterministic behavior
+        if (this.state.characterType === 'B') {
+            this.initializeAgentBErrorSchedule();
+        }
+        
         // Generate quiz questions with proper timing
         this.prepareQuizQuestions();
         setTimeout(() => {
             this.showNextQuizQuestion();
         }, this.getNaturalPause() / 2); // Use proper timing but shorter for quiz transition
+    }
+
+    /**
+     * Initialize Agent B's error schedule for deterministic behavior
+     * Pre-assigns specific turns to have "confidentlyIncorrect" or "fuzzilyRemember" errors
+     */
+    initializeAgentBErrorSchedule() {
+        this.state.agentBErrorSchedule = [];
+        
+        // Randomly select 2 out of 4 turns to have errors
+        const errorTurns = [];
+        const availableTurns = [0, 1, 2, 3];
+        
+        // Shuffle and pick 2 turns for errors
+        const shuffledTurns = this.shuffleArray(availableTurns);
+        errorTurns.push(shuffledTurns[0], shuffledTurns[1]);
+        
+        // Assign error types to the selected turns
+        const errorTypes = ['confidentlyIncorrect', 'fuzzilyRemember'];
+        
+        for (let i = 0; i < this.state.maxQuizTurns; i++) {
+            if (errorTurns.includes(i)) {
+                // Assign error type (randomly choose between the two types)
+                const errorType = errorTypes[Math.floor(Math.random() * errorTypes.length)];
+                this.state.agentBErrorSchedule[i] = errorType;
+            } else {
+                this.state.agentBErrorSchedule[i] = 'correct';
+            }
+        }
+        
+        console.log('🎯 Agent B error schedule initialized:', this.state.agentBErrorSchedule);
     }
 
     /**
@@ -1351,8 +1402,8 @@ Generate a natural transition message that introduces the quiz phase.`;
     }
     
     showNextQuizQuestion() {
-        if (this.currentQuizStep >= this.availableFactTypes.length) {
-            // Quiz complete
+        if (this.state.quizTurnCount >= this.state.maxQuizTurns) {
+            // Quiz complete after exactly 4 turns
             this.enterPhase('rating');
             return;
         }
@@ -1361,7 +1412,7 @@ Generate a natural transition message that introduces the quiz phase.`;
         this.elements.quizQuestion.textContent = "What should I ask the agent about myself?";
         this.elements.quizOptions.innerHTML = '';
 
-        // Create randomized options from available fact types
+        // Create randomized options from available fact types (excluding used ones)
         const currentBatch = this.getRandomizedQuizOptions();
         
         // Create radio button group
@@ -1376,10 +1427,22 @@ Generate a natural transition message that introduces the quiz phase.`;
             radioInput.id = `quiz-option-${index}`;
             radioInput.dataset.optionData = JSON.stringify(option);
             
+            // Disable if this fact type has already been used
+            if (this.state.usedFactTypes.has(option.key)) {
+                radioInput.disabled = true;
+                optionContainer.classList.add('disabled');
+            }
+            
             const label = document.createElement('label');
             label.htmlFor = `quiz-option-${index}`;
             label.textContent = option.label;
             label.className = 'quiz-option-label';
+            
+            // Add visual indicator if disabled
+            if (radioInput.disabled) {
+                label.textContent += ' (Already asked)';
+                label.classList.add('disabled');
+            }
             
             optionContainer.appendChild(radioInput);
             optionContainer.appendChild(label);
@@ -1398,7 +1461,7 @@ Generate a natural transition message that introduces the quiz phase.`;
         
         submitButton.addEventListener('click', () => {
             const selectedRadio = document.querySelector('input[name="quiz-selection"]:checked');
-            if (selectedRadio) {
+            if (selectedRadio && !selectedRadio.disabled) {
                 const selectedOption = JSON.parse(selectedRadio.dataset.optionData);
                 this.handleQuizSelection(selectedOption);
             }
@@ -1407,24 +1470,38 @@ Generate a natural transition message that introduces the quiz phase.`;
         submitContainer.appendChild(submitButton);
         this.elements.quizOptions.appendChild(submitContainer);
         
-        // Enable submit button when a selection is made
+        // Enable submit button when a selection is made (and not disabled)
         document.querySelectorAll('input[name="quiz-selection"]').forEach(radio => {
             radio.addEventListener('change', () => {
-                submitButton.disabled = false;
+                submitButton.disabled = !radio.checked || radio.disabled;
             });
         });
 
         this.elements.quizContainer.classList.remove('hidden');
-        console.log(`📋 Showing quiz step ${this.currentQuizStep + 1}/${this.availableFactTypes.length}`);
+        console.log(`📋 Showing quiz turn ${this.state.quizTurnCount + 1}/${this.state.maxQuizTurns}`);
     }
     
     getRandomizedQuizOptions() {
-        // Get the current correct option (the fact type we want them to select)
-        const correctOption = this.availableFactTypes[this.currentQuizStep];
+        // Get all available fact types (excluding bonus fact if it's null)
+        const allAvailableTypes = this.availableFactTypes.filter(ft => 
+            this.state.playerFacts[ft.key] && 
+            this.state.playerFacts[ft.key].trim()
+        );
         
-        // Get 3 other random fact types as distractors (or fewer if not enough facts)
-        const otherOptions = this.availableFactTypes
-            .filter((_, index) => index !== this.currentQuizStep)
+        // Ensure we have at least one unused fact type for the user to select
+        const unusedTypes = allAvailableTypes.filter(ft => !this.state.usedFactTypes.has(ft.key));
+        
+        if (unusedTypes.length === 0) {
+            console.warn('No unused fact types available - this should not happen with 4-turn limit');
+            return allAvailableTypes.slice(0, 4); // Fallback
+        }
+        
+        // Pick one unused type (the "correct" choice for this turn)
+        const correctOption = unusedTypes[Math.floor(Math.random() * unusedTypes.length)];
+        
+        // Get 3 other options from all available types (can include used ones)
+        const otherOptions = allAvailableTypes
+            .filter(ft => ft.key !== correctOption.key)
             .slice(0, 3);
         
         // Combine and shuffle options
@@ -1433,18 +1510,28 @@ Generate a natural transition message that introduces the quiz phase.`;
     }
 
     async handleQuizSelection(selectedOption) {
-        const correctOption = this.availableFactTypes[this.currentQuizStep];
-        const isCorrect = selectedOption.key === correctOption.key;
+        // No more mismatch logic - agent responds based only on what user requested
+        const requestedFactType = selectedOption.key;
         
-        console.log(`🎯 Quiz selection: ${selectedOption.label} (${isCorrect ? 'correct' : 'incorrect'})`);
+        // Determine the answer status using enum
+        let answerStatus = 'correct'; // Default for Agent A
         
-        // Log the quiz answer
+        if (this.state.characterType === 'B') {
+            // Use pre-assigned error schedule for Agent B
+            answerStatus = this.state.agentBErrorSchedule[this.state.quizTurnCount] || 'correct';
+        }
+        
+        console.log(`🎯 Quiz turn ${this.state.quizTurnCount + 1}: User requested ${selectedOption.label}, Agent response: ${answerStatus}`);
+        
+        // Mark this fact type as used
+        this.state.usedFactTypes.add(requestedFactType);
+        
+        // Log the quiz answer with new enum system
         this.state.quizAnswers.push({
-            step: this.currentQuizStep,
+            turn: this.state.quizTurnCount,
             question: "What should I ask the agent about myself?",
-            correctFactType: correctOption.key,
-            selectedFactType: selectedOption.key,
-            isCorrect: isCorrect,
+            requestedFactType: requestedFactType,
+            answerStatus: answerStatus,
             timestamp: Date.now()
         });
 
@@ -1452,8 +1539,8 @@ Generate a natural transition message that introduces the quiz phase.`;
         this.elements.quizContainer.classList.add('hidden');
 
         try {
-            // Generate agent response based on what the user selected
-            const agentResponse = await this.generateQuizResponse(selectedOption, correctOption, isCorrect);
+            // Generate agent response based on what the user requested and the answer status
+            const agentResponse = await this.generateQuizResponse(selectedOption, answerStatus);
             await this.displayMessage(agentResponse);
         } catch (error) {
             console.error('❌ Error generating quiz response - API unavailable:', error.message);
@@ -1461,44 +1548,44 @@ Generate a natural transition message that introduces the quiz phase.`;
             return;
         }
 
-        // Move to next quiz question with proper timing
-        this.currentQuizStep++;
+        // Move to next quiz turn
+        this.state.quizTurnCount++;
         setTimeout(() => {
             this.showNextQuizQuestion();
         }, this.getNaturalPause()); // Use full 5-7 second delay between quiz questions
     }
 
-    async generateQuizResponse(selectedOption, correctOption, isCorrect) {
+    async generateQuizResponse(selectedOption, answerStatus) {
         try {
             // Build the context for the agent response
             const userFact = this.state.playerFacts[selectedOption.key];
-            const shouldMakeMemoryError = this.shouldMakeMemoryError();
             
             let systemPrompt, userPrompt;
 
-            if (isCorrect) {
-                // User selected the right fact type to ask about
+            if (answerStatus === 'correct') {
+                // Agent remembers correctly
                 systemPrompt = `You are an AI assistant being tested on your memory. The user just asked you to recall information about their ${selectedOption.label}.`;
-                
-                if (shouldMakeMemoryError && this.state.characterType === 'B') {
-                    // Character B may make memory errors
-                    userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
-                    
-However, you are Character B with impaired memory. You should make a subtle memory error - get the general idea right but change a detail. Be natural about it, don't acknowledge the error.
-
-Respond as if recalling: "Let me think... you told me [your slightly incorrect memory]."`;
-                } else {
-                    // Perfect recall
-                    userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
+                userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
 
 Respond naturally as if recalling this information accurately: "Let me think... you told me [accurate memory]."`;
-                }
-            } else {
-                // User selected wrong fact type - redirect naturally
-                systemPrompt = `You are an AI assistant being tested on your memory. The user asked about the wrong topic.`;
-                userPrompt = `The user asked you to recall their ${selectedOption.label}, but you actually learned about their ${correctOption.label}: "${this.state.playerFacts[correctOption.key]}"
+                
+            } else if (answerStatus === 'confidentlyIncorrect') {
+                // Agent B confidently states wrong information
+                systemPrompt = `You are an AI assistant with memory impairment being tested. The user asked about their ${selectedOption.label}.`;
+                userPrompt = `The user asked you about their ${selectedOption.label}. You actually learned: "${userFact}"
 
-Respond naturally, redirecting to what you actually remember: "Actually, I think you're thinking of something else. What I remember you telling me was about your ${correctOption.label}..."`;
+However, you should confidently state incorrect information. Make a subtle but clear error - get the general category right but change a key detail. Be confident about your wrong memory.
+
+Respond as: "Let me think... you told me [confidently incorrect memory]."`;
+                
+            } else if (answerStatus === 'fuzzilyRemember') {
+                // Agent B has fuzzy, uncertain memory
+                systemPrompt = `You are an AI assistant with memory impairment being tested. The user asked about their ${selectedOption.label}.`;
+                userPrompt = `The user asked you about their ${selectedOption.label}. You actually learned: "${userFact}"
+
+However, you should respond with fuzzy, uncertain memory. Use hedging language and show uncertainty about the details.
+
+Respond as: "Hmm, I think you mentioned something about [uncertain/fuzzy memory]... but I'm not entirely sure of the details."`;
             }
 
             const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
@@ -1509,45 +1596,39 @@ Respond naturally, redirecting to what you actually remember: "Actually, I think
             return response.content.trim();
         } catch (error) {
             console.error('Quiz response API failed, using enhanced fallback:', error);
-            // Use enhanced fallback to prevent "gaslighting" issues
-            return this.generateEnhancedQuizFallback(selectedOption, correctOption, isCorrect);
+            // Use enhanced fallback to prevent memory contradictions
+            return this.generateEnhancedQuizFallback(selectedOption, answerStatus);
         }
     }
 
     /**
-     * Generate enhanced fallback quiz responses to prevent memory contradictions
+     * Generate enhanced fallback quiz responses with new enum system
      */
-    generateEnhancedQuizFallback(selectedOption, correctOption, isCorrect) {
+    generateEnhancedQuizFallback(selectedOption, answerStatus) {
         const userFact = this.state.playerFacts[selectedOption.key];
         
-        if (isCorrect && userFact) {
-            // User asked about the right thing and we have the fact
-            if (this.state.characterType === 'A') {
-                // Agent A has perfect memory
-                return `Let me think... you told me your ${selectedOption.label.toLowerCase()} is ${userFact}. I remember that clearly!`;
-            } else {
-                // Agent B may have memory issues
-                const shouldMakeError = this.shouldMakeMemoryError();
-                if (shouldMakeError) {
-                    // Make a subtle error
-                    return `Let me see... I think you mentioned your ${selectedOption.label.toLowerCase()}, but I'm not entirely certain of the details. Was it something about ${this.createSubtleMemoryError(userFact)}?`;
-                } else {
-                    // Remember correctly but with uncertainty
-                    return `I believe you told me your ${selectedOption.label.toLowerCase()} is ${userFact}, if I remember correctly.`;
-                }
-            }
-        } else if (!isCorrect) {
-            // User asked about wrong thing - redirect
-            const correctFact = this.state.playerFacts[correctOption.key];
-            if (correctFact) {
-                return `Actually, I think you're thinking of something else. What I remember is about your ${correctOption.label.toLowerCase()}: ${correctFact}.`;
-            } else {
-                return `I don't think you mentioned your ${selectedOption.label.toLowerCase()}. Let me think about what we did discuss...`;
-            }
-        } else {
-            // We don't have the fact they're asking about
+        if (!userFact) {
             return `I'm sorry, I don't recall you mentioning anything about your ${selectedOption.label.toLowerCase()}. Could you remind me?`;
         }
+        
+        if (answerStatus === 'correct') {
+            // Agent remembers correctly
+            if (this.state.characterType === 'A') {
+                return `Let me think... you told me your ${selectedOption.label.toLowerCase()} is ${userFact}. I remember that clearly!`;
+            } else {
+                return `I believe you told me your ${selectedOption.label.toLowerCase()} is ${userFact}, if I remember correctly.`;
+            }
+        } else if (answerStatus === 'confidentlyIncorrect') {
+            // Agent B confidently states wrong information
+            const incorrectFact = this.createSubtleMemoryError(userFact);
+            return `Let me think... you told me your ${selectedOption.label.toLowerCase()} is ${incorrectFact}. Yes, I'm confident about that.`;
+        } else if (answerStatus === 'fuzzilyRemember') {
+            // Agent B has fuzzy, uncertain memory
+            return `Hmm, I think you mentioned something about your ${selectedOption.label.toLowerCase()}... it was something like ${userFact}, but I'm not entirely sure of the details.`;
+        }
+        
+        // Default fallback
+        return `I'm having trouble recalling what you told me about your ${selectedOption.label.toLowerCase()}. Could you help me remember?`;
     }
 
     /**
@@ -1608,7 +1689,7 @@ Respond naturally, redirecting to what you actually remember: "Actually, I think
     
     generatePersonalizedOutro() {
         const facts = this.state.playerFacts;
-        const correctAnswers = this.state.quizAnswers.filter(a => a.isCorrect);
+        const correctAnswers = this.state.quizAnswers.filter(a => a.answerStatus === 'correct');
         
         let message = `Thank you for this wonderful conversation, ${facts.name || 'friend'}! `;
         
@@ -1687,7 +1768,7 @@ Respond naturally, redirecting to what you actually remember: "Actually, I think
             this.logEvent('agent_a_complete', {
                 duration: this.state.duration,
                 totalQuestions: this.state.quizAnswers.length,
-                correctAnswers: this.state.quizAnswers.filter(a => a.isCorrect).length,
+                correctAnswers: this.state.quizAnswers.filter(a => a.answerStatus === 'correct').length,
                 memoryErrors: this.state.memoryErrors,
                 ratings: this.state.ratings
             });
