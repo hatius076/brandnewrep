@@ -625,8 +625,24 @@ class VisualNovelGame {
         }
         
         if (this.elements.debugMemory) {
-            this.elements.debugMemory.textContent = 
-                `Errors: ${this.state.memoryErrors}/${GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS}`;
+            if (this.state.characterType === 'B' && this.conversationFlow && this.conversationFlow.state.agentBErrorSchedule.length > 0) {
+                // Show Agent B quiz error schedule
+                const schedule = this.conversationFlow.state.agentBErrorSchedule;
+                const scheduleText = schedule.map((type, index) => {
+                    const turnNum = index + 9;
+                    const displayType = type === 'CONFIDENTLY_INCORRECT' ? 'Confidently Incorrect' :
+                                      type === 'VAGUELY_CORRECT' ? 'Vaguely Correct' : 'Correct';
+                    return `Turn ${turnNum}: ${displayType}`;
+                }).join(', ');
+                
+                this.elements.debugMemory.innerHTML = `Quiz Error Schedule:<br>${scheduleText}`;
+            } else if (this.state.characterType === 'A') {
+                // Show Agent A perfect memory status
+                this.elements.debugMemory.textContent = 'Quiz Performance: All Correct (Perfect Memory)';
+            } else {
+                // Fallback for when error schedule isn't ready yet
+                this.elements.debugMemory.textContent = 'Quiz Error Schedule: Initializing...';
+            }
         }
             
         if (this.state.lastLLMThought && this.elements.debugThought) {
