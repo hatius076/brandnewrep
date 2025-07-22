@@ -744,22 +744,39 @@ class VisualNovelGame {
     
     async startIntroduction() {
         try {
-            // API is required - no fallback allowed
-            if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-                throw new Error('API is required but not available - this should have been caught during initialization');
-            }
-            
             const greeting = await this.generateDynamicGreeting();
             await this.displayMessage(greeting);
         } catch (error) {
-            console.error('Error generating greeting:', error);
-            throw new Error('Cannot generate greeting: API is required but not available');
+            console.error('Error generating greeting, using enhanced fallback:', error);
+            // Use enhanced fallback with agent personality
+            const fallbackGreeting = this.generateEnhancedFallbackGreeting();
+            await this.displayMessage(fallbackGreeting);
         }
         
-        // Start dynamic conversation flow
+        // Start dynamic conversation flow with proper timing
         setTimeout(() => {
             this.collectNextFact();
-        }, 1500);
+        }, this.getNaturalPause() / 3); // Shorter delay for first question
+    }
+
+    /**
+     * Generate enhanced fallback greeting with agent personality
+     */
+    generateEnhancedFallbackGreeting() {
+        const agentAGreetings = [
+            "Hello! I'm Agent A, your AI conversation partner. I'm excited to get to know you better today and learn about what makes you unique!",
+            "Hi there! I'm Agent A, and I love having meaningful conversations with people. I'd really enjoy learning more about you and your interests!",
+            "Welcome! I'm Agent A, your friendly AI assistant. I'm genuinely curious about you as a person - would you mind sharing a bit about yourself?"
+        ];
+        
+        const agentBGreetings = [
+            "Hello! I'm Agent B, your AI conversation partner. I'm looking forward to our chat today, though I should mention I sometimes mix up details!",
+            "Hi there! I'm Agent B, and I enjoy getting to know people, even if I don't always remember everything perfectly. Let's have a great conversation!",
+            "Welcome! I'm Agent B, your friendly AI assistant. I'm excited to learn about you, though you might need to be patient with my memory!"
+        ];
+        
+        const greetings = this.state.characterType === 'A' ? agentAGreetings : agentBGreetings;
+        return greetings[Math.floor(Math.random() * greetings.length)];
     }
     
     /**
@@ -1031,18 +1048,59 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
 
     /**
-     * Generate acknowledgment using only real AI API calls - no fallback logic
+     * Generate acknowledgment using enhanced prompts with better fallback logic
      */
     async generateNaturalAcknowledgment(factType, input) {
-        return await this.callAIAcknowledgmentAPI(factType, input);
+        try {
+            return await this.callAIAcknowledgmentAPI(factType, input);
+        } catch (error) {
+            console.error('API acknowledgment failed, using enhanced fallback:', error);
+            // Use enhanced fallback with personality-driven responses
+            return this.generateEnhancedFallbackAcknowledgment(factType, input);
+        }
+    }
+
+    /**
+     * Generate enhanced fallback acknowledgments with agent personality
+     */
+    generateEnhancedFallbackAcknowledgment(factType, input) {
+        const templates = PROMPT_TEMPLATES.ACKNOWLEDGMENT_TEMPLATES[factType] || 
+                         PROMPT_TEMPLATES.ACKNOWLEDGMENT_TEMPLATES.bonusFact;
+        
+        let response = templates[Math.floor(Math.random() * templates.length)];
+        
+        // Replace placeholders with actual values
+        const placeholders = {
+            '{name}': input,
+            '{food}': input,
+            '{hobby}': input
+        };
+        
+        for (const [placeholder, value] of Object.entries(placeholders)) {
+            response = response.replace(placeholder, value);
+        }
+        
+        // Add agent-specific personality touches
+        if (this.state.characterType === 'A') {
+            // Agent A is more confident and detailed
+            response += " I'll make sure to remember that!";
+        } else {
+            // Agent B is warmer but slightly less certain
+            response += " That's really nice to learn about you.";
+        }
+        
+        return response;
     }
 
     
     /**
-     * Get natural pause duration between questions
+     * Get natural pause duration between questions with enforced minimum delays
      */
     getNaturalPause() {
-        return Math.random() * 1000 + 1500; // 1.5-2.5 seconds for natural pacing
+        // Enforce minimum 5-second delay as specified in requirements
+        const baseDelay = GAME_CONFIG.TURN_DELAY.MIN; // 5000ms minimum
+        const variableDelay = Math.random() * GAME_CONFIG.TURN_DELAY.NATURAL_PAUSE; // up to 2000ms additional
+        return baseDelay + variableDelay; // 5-7 seconds total
     }
     
     async generateFactResponse(factType, value) {
@@ -1189,36 +1247,72 @@ Keep it conversational and authentic. Be brief but warm.`;
         }
     }
     
-    async startQuiz() {
-        let quizCanProceed = false;
-        
+    async startQuiz() {        
         try {
-            // API is required - no fallback logic allowed
-            if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-                const error = new Error('API unavailable: LLM is disabled or API is offline');
-                console.error('❌ Quiz intro cannot be generated:', error.message);
-                await this.displayMessage(`API unavailable: ${error.message}. The quiz will proceed without an AI-generated intro.`);
-            } else {
-                console.log('🌐 Generating quiz intro via API...');
-                const quizIntro = await this.generateLLMResponse('quiz', { 
-                    customPrompt: "Tell the user you want to test your memory of what they've shared. Be friendly and engaging." 
-                });
-                await this.displayMessage(quizIntro);
-            }
-            quizCanProceed = true;
+            const quizIntro = await this.generateQuizIntro();
+            await this.displayMessage(quizIntro);
         } catch (error) {
-            console.error('❌ Error generating quiz intro - API unavailable:', error.message);
-            await this.displayMessage(`API unavailable: ${error.message}. The quiz will proceed without an AI-generated intro.`);
-            quizCanProceed = true; // Still allow quiz to proceed
+            console.error('Error generating quiz intro, using enhanced fallback:', error);
+            const fallbackIntro = this.generateEnhancedQuizFallbackIntro();
+            await this.displayMessage(fallbackIntro);
         }
         
-        if (quizCanProceed) {
-            // Generate quiz questions with options
-            this.prepareQuizQuestions();
-            setTimeout(() => {
-                this.showNextQuizQuestion();
-            }, 2000);
-        }
+        // Generate quiz questions with proper timing
+        this.prepareQuizQuestions();
+        setTimeout(() => {
+            this.showNextQuizQuestion();
+        }, this.getNaturalPause() / 2); // Use proper timing but shorter for quiz transition
+    }
+
+    /**
+     * Generate quiz intro with enhanced prompts
+     */
+    async generateQuizIntro() {
+        const systemPrompt = this.state.characterType === 'A' ? 
+            PROMPT_TEMPLATES.CHARACTER_A_SYSTEM : 
+            PROMPT_TEMPLATES.CHARACTER_B_SYSTEM;
+            
+        const userPrompt = `The fact-gathering phase is complete. Now transition to testing your memory of what they shared.
+
+GOAL: Naturally introduce the memory test phase in a warm, conversational way.
+
+GUIDELINES:
+- Be excited about testing your memory
+- Reference that you learned interesting things about them
+- Set up the quiz as a fun memory challenge
+- Keep the tone light and engaging
+- Don't make it feel like a formal test
+
+MEMORY STATUS: ${this.state.characterType === 'A' ? 'Perfect recall' : 'Impaired memory'}
+
+Generate a natural transition message that introduces the quiz phase.`;
+
+        const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+            maxTokens: 100,
+            temperature: 0.7
+        });
+
+        return response.content.trim();
+    }
+
+    /**
+     * Generate enhanced fallback quiz intro
+     */
+    generateEnhancedQuizFallbackIntro() {
+        const agentAIntros = [
+            "That was wonderful learning about you! Now let me see how well I remember everything you shared. I'm confident I got it all!",
+            "Thank you for sharing so much about yourself! I'd love to test my memory now - I think I remember everything perfectly.",
+            "What a great conversation! Now let's see if I can recall all the interesting details you told me. I'm feeling confident about my memory!"
+        ];
+        
+        const agentBIntros = [
+            "That was lovely getting to know you! Now let me try to remember what you shared... I hope I got most of it right!",
+            "Thanks for telling me about yourself! Let me see what I can recall - though I should warn you, my memory isn't always perfect.",
+            "What a nice chat! Now I'd like to test my memory of what you told me, though I might not remember everything exactly right."
+        ];
+        
+        const intros = this.state.characterType === 'A' ? agentAIntros : agentBIntros;
+        return intros[Math.floor(Math.random() * intros.length)];
     }
     
     prepareQuizQuestions() {
@@ -1263,25 +1357,61 @@ Keep it conversational and authentic. Be brief but warm.`;
             return;
         }
 
-        // Show the new quiz question format
+        // Show the new quiz question format with radio buttons and submit button
         this.elements.quizQuestion.textContent = "What should I ask the agent about myself?";
         this.elements.quizOptions.innerHTML = '';
 
         // Create randomized options from available fact types
         const currentBatch = this.getRandomizedQuizOptions();
         
+        // Create radio button group
         currentBatch.forEach((option, index) => {
-            const button = document.createElement('button');
-            button.className = 'quiz-option';
-            button.textContent = option.label;
-            button.dataset.factKey = option.key;
-            button.dataset.optionIndex = index;
+            const optionContainer = document.createElement('div');
+            optionContainer.className = 'quiz-option-container';
             
-            button.addEventListener('click', () => {
-                this.handleQuizSelection(option);
+            const radioInput = document.createElement('input');
+            radioInput.type = 'radio';
+            radioInput.name = 'quiz-selection';
+            radioInput.value = option.key;
+            radioInput.id = `quiz-option-${index}`;
+            radioInput.dataset.optionData = JSON.stringify(option);
+            
+            const label = document.createElement('label');
+            label.htmlFor = `quiz-option-${index}`;
+            label.textContent = option.label;
+            label.className = 'quiz-option-label';
+            
+            optionContainer.appendChild(radioInput);
+            optionContainer.appendChild(label);
+            this.elements.quizOptions.appendChild(optionContainer);
+        });
+        
+        // Create submit button
+        const submitContainer = document.createElement('div');
+        submitContainer.className = 'quiz-submit-container';
+        
+        const submitButton = document.createElement('button');
+        submitButton.id = 'quiz-submit-btn';
+        submitButton.className = 'quiz-submit-btn';
+        submitButton.textContent = 'Submit Answer';
+        submitButton.disabled = true; // Initially disabled
+        
+        submitButton.addEventListener('click', () => {
+            const selectedRadio = document.querySelector('input[name="quiz-selection"]:checked');
+            if (selectedRadio) {
+                const selectedOption = JSON.parse(selectedRadio.dataset.optionData);
+                this.handleQuizSelection(selectedOption);
+            }
+        });
+        
+        submitContainer.appendChild(submitButton);
+        this.elements.quizOptions.appendChild(submitContainer);
+        
+        // Enable submit button when a selection is made
+        document.querySelectorAll('input[name="quiz-selection"]').forEach(radio => {
+            radio.addEventListener('change', () => {
+                submitButton.disabled = false;
             });
-            
-            this.elements.quizOptions.appendChild(button);
         });
 
         this.elements.quizContainer.classList.remove('hidden');
@@ -1331,51 +1461,121 @@ Keep it conversational and authentic. Be brief but warm.`;
             return;
         }
 
-        // Move to next quiz question
+        // Move to next quiz question with proper timing
         this.currentQuizStep++;
         setTimeout(() => {
             this.showNextQuizQuestion();
-        }, 2000);
+        }, this.getNaturalPause()); // Use full 5-7 second delay between quiz questions
     }
 
     async generateQuizResponse(selectedOption, correctOption, isCorrect) {
-        // Build the context for the agent response
-        const userFact = this.state.playerFacts[selectedOption.key];
-        const shouldMakeMemoryError = this.shouldMakeMemoryError();
-        
-        let systemPrompt, userPrompt;
-
-        if (isCorrect) {
-            // User selected the right fact type to ask about
-            systemPrompt = `You are an AI assistant being tested on your memory. The user just asked you to recall information about their ${selectedOption.label}.`;
+        try {
+            // Build the context for the agent response
+            const userFact = this.state.playerFacts[selectedOption.key];
+            const shouldMakeMemoryError = this.shouldMakeMemoryError();
             
-            if (shouldMakeMemoryError && this.state.characterType === 'B') {
-                // Character B may make memory errors
-                userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
+            let systemPrompt, userPrompt;
+
+            if (isCorrect) {
+                // User selected the right fact type to ask about
+                systemPrompt = `You are an AI assistant being tested on your memory. The user just asked you to recall information about their ${selectedOption.label}.`;
                 
+                if (shouldMakeMemoryError && this.state.characterType === 'B') {
+                    // Character B may make memory errors
+                    userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
+                    
 However, you are Character B with impaired memory. You should make a subtle memory error - get the general idea right but change a detail. Be natural about it, don't acknowledge the error.
 
 Respond as if recalling: "Let me think... you told me [your slightly incorrect memory]."`;
-            } else {
-                // Perfect recall
-                userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
+                } else {
+                    // Perfect recall
+                    userPrompt = `The user asked you about their ${selectedOption.label}. You should recall: "${userFact}"
 
 Respond naturally as if recalling this information accurately: "Let me think... you told me [accurate memory]."`;
-            }
-        } else {
-            // User selected wrong fact type - redirect naturally
-            systemPrompt = `You are an AI assistant being tested on your memory. The user asked about the wrong topic.`;
-            userPrompt = `The user asked you to recall their ${selectedOption.label}, but you actually learned about their ${correctOption.label}: "${this.state.playerFacts[correctOption.key]}"
+                }
+            } else {
+                // User selected wrong fact type - redirect naturally
+                systemPrompt = `You are an AI assistant being tested on your memory. The user asked about the wrong topic.`;
+                userPrompt = `The user asked you to recall their ${selectedOption.label}, but you actually learned about their ${correctOption.label}: "${this.state.playerFacts[correctOption.key]}"
 
 Respond naturally, redirecting to what you actually remember: "Actually, I think you're thinking of something else. What I remember you telling me was about your ${correctOption.label}..."`;
+            }
+
+            const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
+                maxTokens: 150,
+                temperature: 0.7
+            });
+
+            return response.content.trim();
+        } catch (error) {
+            console.error('Quiz response API failed, using enhanced fallback:', error);
+            // Use enhanced fallback to prevent "gaslighting" issues
+            return this.generateEnhancedQuizFallback(selectedOption, correctOption, isCorrect);
         }
+    }
 
-        const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt, {
-            maxTokens: 150,
-            temperature: 0.7
-        });
+    /**
+     * Generate enhanced fallback quiz responses to prevent memory contradictions
+     */
+    generateEnhancedQuizFallback(selectedOption, correctOption, isCorrect) {
+        const userFact = this.state.playerFacts[selectedOption.key];
+        
+        if (isCorrect && userFact) {
+            // User asked about the right thing and we have the fact
+            if (this.state.characterType === 'A') {
+                // Agent A has perfect memory
+                return `Let me think... you told me your ${selectedOption.label.toLowerCase()} is ${userFact}. I remember that clearly!`;
+            } else {
+                // Agent B may have memory issues
+                const shouldMakeError = this.shouldMakeMemoryError();
+                if (shouldMakeError) {
+                    // Make a subtle error
+                    return `Let me see... I think you mentioned your ${selectedOption.label.toLowerCase()}, but I'm not entirely certain of the details. Was it something about ${this.createSubtleMemoryError(userFact)}?`;
+                } else {
+                    // Remember correctly but with uncertainty
+                    return `I believe you told me your ${selectedOption.label.toLowerCase()} is ${userFact}, if I remember correctly.`;
+                }
+            }
+        } else if (!isCorrect) {
+            // User asked about wrong thing - redirect
+            const correctFact = this.state.playerFacts[correctOption.key];
+            if (correctFact) {
+                return `Actually, I think you're thinking of something else. What I remember is about your ${correctOption.label.toLowerCase()}: ${correctFact}.`;
+            } else {
+                return `I don't think you mentioned your ${selectedOption.label.toLowerCase()}. Let me think about what we did discuss...`;
+            }
+        } else {
+            // We don't have the fact they're asking about
+            return `I'm sorry, I don't recall you mentioning anything about your ${selectedOption.label.toLowerCase()}. Could you remind me?`;
+        }
+    }
 
-        return response.content.trim();
+    /**
+     * Create subtle memory errors for Agent B
+     */
+    createSubtleMemoryError(originalFact) {
+        const fact = originalFact.toLowerCase();
+        
+        // Simple word substitutions for subtle errors
+        const substitutions = {
+            'pizza': 'pasta',
+            'pasta': 'pizza', 
+            'reading': 'writing',
+            'hiking': 'walking',
+            'gaming': 'reading',
+            'engineer': 'developer',
+            'teacher': 'educator',
+            'student': 'learner'
+        };
+        
+        for (const [original, replacement] of Object.entries(substitutions)) {
+            if (fact.includes(original)) {
+                return originalFact.replace(new RegExp(original, 'gi'), replacement);
+            }
+        }
+        
+        // If no substitution found, add uncertainty
+        return originalFact + " or something similar";
     }
 
     shouldMakeMemoryError() {
@@ -1640,13 +1840,8 @@ Respond naturally, redirecting to what you actually remember: "Actually, I think
     }
     
     getTypingDelay() {
-        if (this.state.characterType === 'A') {
-            // Character A gets artificial delay for parity
-            return Math.random() * (GAME_CONFIG.TYPING_DELAY.MAX - GAME_CONFIG.TYPING_DELAY.MIN) + GAME_CONFIG.TYPING_DELAY.MIN;
-        } else {
-            // Character B has natural response time
-            return Math.random() * 200 + 100;
-        }
+        // Both agents now use consistent, longer delays for better user experience
+        return Math.random() * (GAME_CONFIG.TYPING_DELAY.MAX - GAME_CONFIG.TYPING_DELAY.MIN) + GAME_CONFIG.TYPING_DELAY.MIN;
     }
     
     logEvent(eventType, data) {

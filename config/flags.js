@@ -4,10 +4,16 @@ const GAME_CONFIG = {
     MEMORY_IMPAIRED: false, // Start with Agent A (perfect memory), then Agent B
     DUAL_AGENT_MODE: true, // Enable sequential agent evaluation
     
-    // Timing configuration
+    // Timing configuration - enforced minimum delays for better user experience
     TYPING_DELAY: {
-        MIN: 300,  // minimum delay for typing simulation
-        MAX: 600   // maximum delay for typing simulation
+        MIN: 2000,  // minimum delay for typing simulation (2 seconds)
+        MAX: 3000   // maximum delay for typing simulation (3 seconds)
+    },
+    
+    // Minimum delay between conversation turns (5 seconds as specified)
+    TURN_DELAY: {
+        MIN: 5000,  // minimum 5-second delay between turns
+        NATURAL_PAUSE: 2000  // additional natural pause for conversation flow
     },
     
     // Response length parity
