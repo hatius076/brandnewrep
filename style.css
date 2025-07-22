@@ -193,10 +193,27 @@ body {
     border-color: #95a5a6;
 }
 
+.quiz-option-container.disabled {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.quiz-option-container.disabled:hover {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+
 .quiz-option-container input[type="radio"] {
     width: 20px;
     height: 20px;
     cursor: pointer;
+}
+
+.quiz-option-container input[type="radio"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .quiz-option-label {
@@ -204,6 +221,12 @@ body {
     flex: 1;
     font-size: 1rem;
     line-height: 1.4;
+}
+
+.quiz-option-label.disabled {
+    cursor: not-allowed;
+    color: #6c757d;
+    font-style: italic;
 }
 
 .quiz-submit-container {
