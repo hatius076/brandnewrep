@@ -1,19 +1,17 @@
 /**
  * Conversation Flow Controller
- * Manages turn-taking, timing, and natural conversation progression
+ * Manages the 13-turn deterministic conversation sequence
  */
 
 class ConversationFlowController {
     constructor(gameInstance) {
         this.game = gameInstance;
         this.state = {
-            currentTurn: 'system', // 'system', 'user', 'agent'
-            turnStartTime: null,
-            responseInProgress: false,
+            currentTurn: 1, // Start with turn 1 (1-13)
+            userFacts: {}, // Store collected facts
+            agentBErrorSchedule: [], // Pre-determined error schedule for Agent B
             waitingForUser: false,
-            lastAgentMessage: null,
-            turnTimeout: 30000, // 30 seconds max wait for user
-            responseTimeout: 15000 // 15 seconds max for agent response
+            responseInProgress: false
         };
         
         this.callbacks = {
@@ -21,377 +19,281 @@ class ConversationFlowController {
             onTimeout: [],
             onResponseComplete: []
         };
+
+        // Initialize Agent B error schedule if this is Agent B
+        if (this.game.state.characterType === 'B') {
+            this.state.agentBErrorSchedule = generateQuizErrorSchedule();
+            console.log('🎯 Agent B Quiz Error Schedule:', this.state.agentBErrorSchedule);
+        }
     }
 
     /**
-     * Initialize conversation flow
+     * Initialize conversation flow with first turn
      */
     initialize() {
-        this.startTurn('system');
+        this.startTurn(1);
         this.setupEventListeners();
     }
 
     /**
-     * Start a new conversation turn
+     * Start a specific conversation turn
      */
-    startTurn(turnType, data = {}) {
-        this.state.currentTurn = turnType;
-        this.state.turnStartTime = Date.now();
+    startTurn(turnNumber) {
+        this.state.currentTurn = turnNumber;
+        this.state.responseInProgress = true;
         
-        // Clear any existing timeouts
-        this.clearTimeouts();
+        console.log(`🗣️ Starting conversation turn ${turnNumber}/13`);
         
-        switch (turnType) {
-            case 'system':
-                this.handleSystemTurn(data);
-                break;
-            case 'user':
-                this.handleUserTurn(data);
-                break;
-            case 'agent':
-                this.handleAgentTurn(data);
-                break;
+        // Get template for this turn
+        const template = getConversationTemplate(turnNumber, this.state.userFacts);
+        if (!template) {
+            console.error(`No template found for turn ${turnNumber}`);
+            return;
         }
 
-        // Notify listeners
-        this.notifyTurnChange(turnType, data);
+        // Display the agent's message
+        this.displayAgentMessage(template.prompt);
+
+        // Set up appropriate input based on turn
+        setTimeout(() => {
+            this.setupTurnInput(template);
+        }, 1500);
     }
 
     /**
-     * Handle system turn (initial setup, transitions)
+     * Display agent message with typing animation
      */
-    handleSystemTurn(data) {
+    async displayAgentMessage(message) {
+        // Show typing indicator
+        this.showTypingIndicator();
+        
+        // Calculate typing delay
+        const typingDelay = this.calculateTypingDelay(message);
+        await new Promise(resolve => setTimeout(resolve, typingDelay));
+        
+        // Hide typing and show message
+        this.hideTypingIndicator();
+        await this.game.displayMessage(message);
+        
+        this.state.responseInProgress = false;
+    }
+
+    /**
+     * Set up input for the current turn
+     */
+    setupTurnInput(template) {
         this.hideAllInputs();
         
-        if (data.action === 'start_conversation') {
+        switch (template.inputType) {
+            case 'text':
+                this.showTextInput(template);
+                break;
+            case 'continue':
+                this.showContinueButton();
+                break;
+            case 'quiz':
+                this.showQuizInput(template);
+                break;
+            case 'none':
+                // No input needed (goodbye turn)
+                this.completeConversation();
+                break;
+        }
+    }
+
+    /**
+     * Show text input for fact collection
+     */
+    showTextInput(template) {
+        const container = document.getElementById('text-input-container');
+        const input = document.getElementById('text-input');
+        const label = document.getElementById('input-label');
+        
+        if (label) label.textContent = 'Your response:';
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+        if (container) container.classList.remove('hidden');
+        
+        this.state.waitingForUser = true;
+    }
+
+    /**
+     * Show continue button
+     */
+    showContinueButton() {
+        const container = document.getElementById('continue-container');
+        if (container) container.classList.remove('hidden');
+        
+        // Set up continue button event
+        const button = document.getElementById('continue-button');
+        if (button) {
+            button.onclick = () => this.handleContinue();
+        }
+    }
+
+    /**
+     * Show quiz input for Agent B responses
+     */
+    showQuizInput(template) {
+        const container = document.getElementById('quiz-container');
+        const question = document.getElementById('quiz-question');
+        const options = document.getElementById('quiz-options');
+        
+        if (question) question.textContent = template.prompt;
+        
+        // For quiz turns 9-12, Agent B gives its response
+        if (this.game.state.characterType === 'B') {
+            this.generateAgentBQuizResponse(template);
+        } else {
+            // Agent A gives perfect response
+            this.generateAgentAQuizResponse(template);
+        }
+        
+        if (container) container.classList.remove('hidden');
+    }
+
+    /**
+     * Generate Agent A's perfect quiz response
+     */
+    generateAgentAQuizResponse(template) {
+        const correctAnswer = this.state.userFacts[template.type];
+        if (correctAnswer) {
             setTimeout(() => {
-                this.startTurn('agent', { message: data.initialMessage });
-            }, 500);
-        } else if (data.action === 'transition') {
-            setTimeout(() => {
-                this.game.enterPhase(data.targetPhase);
+                this.displayAgentMessage(`${correctAnswer}!`);
+                setTimeout(() => this.moveToNextTurn(), 2000);
             }, 1000);
         }
     }
 
     /**
-     * Handle user turn (waiting for input)
+     * Generate Agent B's quiz response with potential errors
      */
-    handleUserTurn(data) {
-        this.state.waitingForUser = true;
-        this.state.responseInProgress = false;
+    generateAgentBQuizResponse(template) {
+        const quizTurnIndex = this.state.currentTurn - 9; // Turns 9-12 map to indices 0-3
+        const errorType = this.state.agentBErrorSchedule[quizTurnIndex];
+        const correctAnswer = this.state.userFacts[template.type];
         
-        // Show appropriate input interface
-        this.showUserInput(data.inputType || 'text');
-        
-        // Set timeout for user response
-        this.userTimeout = setTimeout(() => {
-            this.handleUserTimeout();
-        }, this.state.turnTimeout);
-        
-        // Enable input if not already enabled
-        this.enableUserInput();
-    }
-
-    /**
-     * Handle agent turn (AI responding)
-     */
-    handleAgentTurn(data) {
-        this.state.responseInProgress = true;
-        this.state.waitingForUser = false;
-        
-        this.hideAllInputs();
-        this.showTypingIndicator();
-        
-        // Set timeout for agent response
-        this.agentTimeout = setTimeout(() => {
-            this.handleAgentTimeout();
-        }, this.state.responseTimeout);
-        
-        // Generate and display agent response
-        this.generateAgentResponse(data)
-            .then(response => {
-                this.displayAgentMessage(response);
-                this.completeAgentTurn();
-            })
-            .catch(error => {
-                console.error('Agent response failed:', error);
-                this.handleAgentError(error);
-            });
-    }
-
-    /**
-     * Generate agent response based on current context
-     */
-    async generateAgentResponse(data) {
-        try {
-            if (data.message) {
-                // Pre-generated message
-                return data.message;
-            }
-
-            // Generate dynamic response using Warden AI and LLM
-            const context = this.buildCurrentContext();
-            
-            // API is required - no fallback logic allowed
-            if (!this.game.state.llmEnabled) {
-                const error = new Error('API unavailable: LLM is disabled in settings');
-                console.error('API unavailable:', error.message);
-                throw error;
-            }
-
-            console.log('🌐 Making API request for agent response...');
-            try {
-                return await this.game.generateLLMResponse(
-                    this.game.state.phase, 
-                    { 
-                        ...context, 
-                        ...data 
-                    }
-                );
-            } catch (error) {
-                const apiError = new Error(`API unavailable: ${error.message}`);
-                console.error('❌ API call failed:', apiError.message);
-                throw apiError;
-            }
-        } catch (error) {
-            console.error('Failed to generate agent response:', error);
-            throw error;
+        let response;
+        if (errorType === 'correct') {
+            response = `${correctAnswer}!`;
+        } else {
+            response = getAgentBErrorResponse(template.type, correctAnswer, errorType);
         }
-    }
-
-    /**
-     * Build current conversation context
-     */
-    buildCurrentContext() {
-        return {
-            phase: this.game.state.phase,
-            dialogue: this.game.state.dialogue,
-            facts: this.game.dynamicFacts ? this.game.dynamicFacts.getAllFacts() : {},
-            turnNumber: this.game.state.dialogue.length + 1
-        };
-    }
-
-    /**
-     * Display agent message with natural timing
-     */
-    async displayAgentMessage(message) {
-        this.hideTypingIndicator();
-        
-        // Natural typing delay based on message length
-        const typingDelay = this.calculateTypingDelay(message);
-        await new Promise(resolve => setTimeout(resolve, typingDelay));
-        
-        // Display message
-        await this.game.displayMessage(message);
-        this.state.lastAgentMessage = message;
-    }
-
-    /**
-     * Calculate natural typing delay based on message content
-     */
-    calculateTypingDelay(message) {
-        const baseDelay = 800; // Minimum delay
-        const wordsPerMinute = 40; // Simulate realistic typing speed
-        const words = message.split(' ').length;
-        const calculatedDelay = (words / wordsPerMinute) * 60 * 1000;
-        
-        // Cap between 800ms and 4000ms
-        return Math.min(Math.max(baseDelay, calculatedDelay), 4000);
-    }
-
-    /**
-     * Complete agent turn and prepare for next turn
-     */
-    completeAgentTurn() {
-        this.clearTimeouts();
-        this.state.responseInProgress = false;
-        
-        // Determine next turn based on conversation state
-        const nextTurn = this.determineNextTurn();
         
         setTimeout(() => {
-            this.startTurn(nextTurn.type, nextTurn.data);
-        }, 1000); // Brief pause between turns
-        
-        this.notifyResponseComplete();
+            this.displayAgentMessage(response);
+            setTimeout(() => this.moveToNextTurn(), 2000);
+        }, 1000);
     }
 
     /**
-     * Determine what the next turn should be
+     * Handle user input for fact collection turns
      */
-    determineNextTurn() {
-        const phase = this.game.state.phase;
+    onUserInput(inputValue) {
+        if (!this.state.waitingForUser) return;
         
-        switch (phase) {
-            case 'introduction':
-                // Check if we need more facts or should transition
-                if (this.game.dynamicFacts && this.game.dynamicFacts.factCounter < 6) {
-                    return {
-                        type: 'user',
-                        data: { inputType: 'text' }
-                    };
-                } else {
-                    return {
-                        type: 'system', 
-                        data: { 
-                            action: 'transition',
-                            targetPhase: 'quiz'
-                        }
-                    };
-                }
-                
-            case 'quiz':
-                // In quiz phase, determine based on quiz state
-                if (this.game.userQuiz && !this.game.userQuiz.isQuizComplete()) {
-                    return {
-                        type: 'user',
-                        data: { inputType: 'quiz' }
-                    };
-                } else {
-                    return {
-                        type: 'system',
-                        data: {
-                            action: 'transition',
-                            targetPhase: 'rating'
-                        }
-                    };
-                }
-                
-            case 'rating':
-                if (Object.keys(this.game.state.ratings).length < 2) {
-                    return {
-                        type: 'user',
-                        data: { inputType: 'rating' }
-                    };
-                } else {
-                    return {
-                        type: 'system',
-                        data: {
-                            action: 'transition', 
-                            targetPhase: 'complete'
-                        }
-                    };
-                }
-                
-            default:
-                return {
-                    type: 'system',
-                    data: { action: 'complete' }
-                };
+        this.state.waitingForUser = false;
+        this.hideAllInputs();
+        
+        // Store the user's response based on current turn
+        const factKey = this.getTurnFactKey(this.state.currentTurn);
+        if (factKey) {
+            this.state.userFacts[factKey] = inputValue.trim();
+            console.log(`📝 Stored ${factKey}:`, inputValue.trim());
         }
+
+        // Move to next turn
+        this.moveToNextTurn();
     }
 
     /**
-     * Handle user input received
+     * Get the fact key for storing user input based on turn number
      */
-    onUserInput(inputType, inputData) {
-        if (!this.state.waitingForUser) {
-            console.warn('Received user input when not waiting for it');
+    getTurnFactKey(turnNumber) {
+        const factMap = {
+            1: 'name',
+            2: 'favFood', 
+            3: 'favHobby',
+            4: 'hobbyFact',
+            5: 'profession',
+            6: 'funFact'
+        };
+        return factMap[turnNumber];
+    }
+
+    /**
+     * Handle continue button click
+     */
+    handleContinue() {
+        this.hideAllInputs();
+        this.moveToNextTurn();
+    }
+
+    /**
+     * Move to the next conversation turn
+     */
+    moveToNextTurn() {
+        if (this.state.currentTurn >= 13) {
+            this.completeConversation();
             return;
         }
 
-        this.clearTimeouts();
-        this.state.waitingForUser = false;
-        
-        // Process the input
-        this.processUserInput(inputType, inputData);
-        
-        // Move to agent turn
-        this.startTurn('agent', {
-            userInput: inputData,
-            inputType: inputType
-        });
-    }
-
-    /**
-     * Process user input based on type
-     */
-    processUserInput(inputType, inputData) {
-        switch (inputType) {
-            case 'text':
-                // Record fact if in introduction phase
-                if (this.game.state.phase === 'introduction' && this.game.dynamicFacts) {
-                    this.game.dynamicFacts.recordFact(inputData);
-                }
-                break;
-                
-            case 'quiz_selection':
-                // Handle quiz question selection
-                if (this.game.userQuiz) {
-                    this.game.userQuiz.selectQuestion(inputData);
-                }
-                break;
-                
-            case 'rating':
-                // Handle rating input
-                this.game.state.ratings[inputData.type] = inputData.value;
-                break;
+        // Transition to quiz phase if we're moving from turn 8 to 9
+        if (this.state.currentTurn === 8) {
+            this.game.enterPhase('quiz');
         }
-
-        // Log the input
-        this.game.state.dialogue.push({
-            timestamp: Date.now(),
-            speaker: 'User',
-            text: inputData,
-            phase: this.game.state.phase,
-            inputType: inputType
-        });
+        
+        setTimeout(() => {
+            this.startTurn(this.state.currentTurn + 1);
+        }, 1000);
     }
 
     /**
-     * Show appropriate input interface
+     * Complete the conversation
      */
-    showUserInput(inputType) {
-        this.hideAllInputs();
+    completeConversation() {
+        console.log('✅ 13-turn conversation complete');
         
-        switch (inputType) {
-            case 'text':
-                document.getElementById('text-input-container')?.classList.remove('hidden');
-                break;
-            case 'quiz':
-                document.getElementById('quiz-container')?.classList.remove('hidden');
-                break;
-            case 'rating':
-                document.getElementById('rating-container')?.classList.remove('hidden');
-                break;
+        // Update debug information
+        this.updateDebugInfo();
+        
+        // Move to next phase or complete session
+        if (this.game.state.currentAgent === 'A') {
+            // After Agent A, move to Agent B
+            this.game.showAgentBTransition();
+        } else {
+            // After Agent B, complete session
+            this.game.enterPhase('complete');
         }
     }
 
     /**
-     * Hide all input interfaces
+     * Update debug information to show quiz error schedule
      */
-    hideAllInputs() {
-        const containers = [
-            'text-input-container',
-            'quiz-container', 
-            'rating-container',
-            'continue-container'
-        ];
-        
-        containers.forEach(id => {
-            document.getElementById(id)?.classList.add('hidden');
-        });
+    updateDebugInfo() {
+        const debugMemory = document.getElementById('debug-memory');
+        if (debugMemory && this.game.state.characterType === 'B') {
+            const schedule = this.state.agentBErrorSchedule;
+            const scheduleText = schedule.map((type, index) => {
+                const turnNum = index + 9;
+                return `Turn ${turnNum}: ${type}`;
+            }).join('<br>');
+            
+            debugMemory.innerHTML = `Quiz Error Schedule:<br>${scheduleText}`;
+        }
     }
 
     /**
-     * Enable user input elements
+     * Calculate natural typing delay
      */
-    enableUserInput() {
-        const inputs = document.querySelectorAll('input, button, select');
-        inputs.forEach(input => {
-            input.disabled = false;
-        });
-    }
-
-    /**
-     * Disable user input elements
-     */
-    disableUserInput() {
-        const inputs = document.querySelectorAll('input, button, select');
-        inputs.forEach(input => {
-            input.disabled = true;
-        });
+    calculateTypingDelay(message) {
+        const baseDelay = 800;
+        const wordsPerMinute = 40;
+        const words = message.split(' ').length;
+        const calculatedDelay = (words / wordsPerMinute) * 60 * 1000;
+        return Math.min(Math.max(baseDelay, calculatedDelay), 4000);
     }
 
     /**
@@ -409,59 +311,25 @@ class ConversationFlowController {
     }
 
     /**
-     * Handle user timeout
+     * Hide all input interfaces
      */
-    handleUserTimeout() {
-        console.log('User input timeout');
+    hideAllInputs() {
+        const containers = [
+            'text-input-container',
+            'quiz-container',
+            'rating-container', 
+            'continue-container'
+        ];
         
-        // Gentle prompt to continue
-        this.startTurn('agent', {
-            message: "I'm still here when you're ready to continue our conversation!"
+        containers.forEach(id => {
+            document.getElementById(id)?.classList.add('hidden');
         });
     }
 
     /**
-     * Handle agent timeout - always show API unavailable message
-     */
-    handleAgentTimeout() {
-        console.error('❌ Agent response timeout - API unavailable');
-        
-        // Show clear API unavailable message
-        this.displayAgentMessage("API unavailable: Request timed out. Please check your connection and try again.");
-        this.completeAgentTurn();
-    }
-
-    /**
-     * Handle agent error - always show API unavailable message
-     */
-    handleAgentError(error) {
-        console.error('❌ Agent error - API unavailable:', error.message);
-        
-        // Show clear API unavailable message
-        const errorMessage = `API unavailable: ${error.message}. Please check your connection and API configuration.`;
-        this.displayAgentMessage(errorMessage);
-        this.completeAgentTurn();
-    }
-
-    /**
-     * Clear all active timeouts
-     */
-    clearTimeouts() {
-        if (this.userTimeout) {
-            clearTimeout(this.userTimeout);
-            this.userTimeout = null;
-        }
-        if (this.agentTimeout) {
-            clearTimeout(this.agentTimeout);
-            this.agentTimeout = null;
-        }
-    }
-
-    /**
-     * Setup event listeners for conversation flow
+     * Setup event listeners for user input
      */
     setupEventListeners() {
-        // Text input submission
         const submitButton = document.getElementById('submit-button');
         const textInput = document.getElementById('text-input');
         
@@ -469,7 +337,7 @@ class ConversationFlowController {
             submitButton.addEventListener('click', () => {
                 const input = textInput?.value?.trim();
                 if (input) {
-                    this.onUserInput('text', input);
+                    this.onUserInput(input);
                     textInput.value = '';
                 }
             });
@@ -485,85 +353,30 @@ class ConversationFlowController {
     }
 
     /**
-     * Add callback for turn changes
-     */
-    onTurnChange(callback) {
-        this.callbacks.onTurnChange.push(callback);
-    }
-
-    /**
-     * Add callback for timeouts
-     */
-    onTimeout(callback) {
-        this.callbacks.onTimeout.push(callback);
-    }
-
-    /**
-     * Add callback for response completion
-     */
-    onResponseComplete(callback) {
-        this.callbacks.onResponseComplete.push(callback);
-    }
-
-    /**
-     * Notify turn change listeners
-     */
-    notifyTurnChange(turnType, data) {
-        this.callbacks.onTurnChange.forEach(callback => {
-            try {
-                callback(turnType, data);
-            } catch (error) {
-                console.error('Turn change callback error:', error);
-            }
-        });
-    }
-
-    /**
-     * Notify response completion listeners
-     */
-    notifyResponseComplete() {
-        this.callbacks.onResponseComplete.forEach(callback => {
-            try {
-                callback();
-            } catch (error) {
-                console.error('Response complete callback error:', error);
-            }
-        });
-    }
-
-    /**
-     * Get current turn information
-     */
-    getCurrentTurn() {
-        return {
-            type: this.state.currentTurn,
-            startTime: this.state.turnStartTime,
-            duration: Date.now() - this.state.turnStartTime,
-            responseInProgress: this.state.responseInProgress,
-            waitingForUser: this.state.waitingForUser
-        };
-    }
-
-    /**
-     * Force end current turn (emergency stop)
-     */
-    forceEndTurn() {
-        this.clearTimeouts();
-        this.state.responseInProgress = false;
-        this.state.waitingForUser = false;
-        this.hideTypingIndicator();
-        this.hideAllInputs();
-    }
-
-    /**
      * Reset conversation flow
      */
     reset() {
-        this.forceEndTurn();
-        this.state.currentTurn = 'system';
-        this.state.turnStartTime = null;
-        this.state.lastAgentMessage = null;
+        this.state.currentTurn = 1;
+        this.state.userFacts = {};
+        this.state.waitingForUser = false;
+        this.state.responseInProgress = false;
+        
+        if (this.game.state.characterType === 'B') {
+            this.state.agentBErrorSchedule = generateQuizErrorSchedule();
+        }
+        
+        this.hideAllInputs();
     }
+
+    // Legacy compatibility methods
+    onTurnChange(callback) { this.callbacks.onTurnChange.push(callback); }
+    onTimeout(callback) { this.callbacks.onTimeout.push(callback); }
+    onResponseComplete(callback) { this.callbacks.onResponseComplete.push(callback); }
+}
+
+// Export for module systems
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = ConversationFlowController;
 }
 
 // Export for module systems

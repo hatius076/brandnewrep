@@ -51,6 +51,7 @@ class VisualNovelGame {
         
         this.elements = {};
         this.llmClient = null;
+        this.conversationFlow = null; // New conversation flow controller
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
@@ -136,11 +137,7 @@ class VisualNovelGame {
     }
     
     initializeEventListeners() {
-        // Text input submission
-        this.elements.submitButton.addEventListener('click', () => this.handleTextSubmit());
-        this.elements.textInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleTextSubmit();
-        });
+        // Note: Text input submission is now handled by ConversationFlowController
         
         // Continue button
         this.elements.continueButton.addEventListener('click', () => this.advanceDialogue());
@@ -660,7 +657,10 @@ class VisualNovelGame {
             dualAgentMode: true,
             currentAgent: this.state.currentAgent
         });
-        this.enterPhase('introduction');
+        
+        // Initialize conversation flow controller
+        this.conversationFlow = new ConversationFlowController(this);
+        this.conversationFlow.initialize();
     }
     
     updateAgentIndicator() {
@@ -676,7 +676,7 @@ class VisualNovelGame {
     }
     
     async startAgentB() {
-        // Store Agent A session data
+        // Store Agent A session data  
         this.state.sessionRecords.agentA = {
             dialogue: [...this.state.dialogue],
             memoryFlag: false,
@@ -698,13 +698,10 @@ class VisualNovelGame {
         this.state.ratings = {};
         this.state.memoryErrors = 0;
         
-        // Reset quiz state for new agent - re-enable all fact type buttons
+        // Reset quiz state for new agent
         this.state.quizTurnCount = 0;
         this.state.usedFactTypes.clear();
         this.state.agentBErrorSchedule = [];
-        
-        // Keep player facts but don't reset them
-        // Agent B will have memory impairment during conversations
         
         this.updateAgentIndicator();
         this.hideAllInputs();
@@ -714,7 +711,9 @@ class VisualNovelGame {
         await this.displayMessage("Now let's chat with a different AI assistant. This is Agent B!");
         
         setTimeout(() => {
-            this.enterPhase('introduction');
+            // Initialize new conversation flow for Agent B
+            this.conversationFlow = new ConversationFlowController(this);
+            this.conversationFlow.initialize();
         }, 2000);
     }
     
@@ -723,19 +722,29 @@ class VisualNovelGame {
         const currentPhaseIndex = ['introduction', 'quiz', 'rating', 'complete'].indexOf(this.state.phase);
         this.elements.progressIndicator.textContent = `${phases[currentPhaseIndex] || 'Starting'}`;
     }
-    
+
+    /**
+     * Show Agent B transition from conversation flow
+     */
+    showAgentBTransition() {
+        this.elements.continueToAgentB.classList.remove('hidden');
+        this.elements.continueToAgentB.textContent = 'Continue to Agent B';
+    }
+
+    /**
+     * Enter a phase (updated for new conversation flow)
+     */
     enterPhase(phase) {
         this.state.phase = phase;
-        this.state.currentStep = 0;
         this.updateProgressIndicator();
         this.hideAllInputs();
         
         switch (phase) {
             case 'introduction':
-                this.startIntroduction();
+                // Handled by ConversationFlowController
                 break;
             case 'quiz':
-                this.startQuiz();
+                // Handled by ConversationFlowController
                 break;
             case 'rating':
                 this.startRating();
