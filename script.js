@@ -51,6 +51,7 @@ class VisualNovelGame {
         
         this.elements = {};
         this.llmClient = null;
+        this.conversationFlow = null; // New conversation flow controller
         this.initializeElements();
         this.initializeEventListeners();
         this.loadDialogueData();
@@ -136,11 +137,7 @@ class VisualNovelGame {
     }
     
     initializeEventListeners() {
-        // Text input submission
-        this.elements.submitButton.addEventListener('click', () => this.handleTextSubmit());
-        this.elements.textInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleTextSubmit();
-        });
+        // Note: Text input submission is now handled by ConversationFlowController
         
         // Continue button
         this.elements.continueButton.addEventListener('click', () => this.advanceDialogue());
@@ -628,8 +625,24 @@ class VisualNovelGame {
         }
         
         if (this.elements.debugMemory) {
-            this.elements.debugMemory.textContent = 
-                `Errors: ${this.state.memoryErrors}/${GAME_CONFIG.MEMORY_ACCURACY.MAX_ERRORS}`;
+            if (this.state.characterType === 'B' && this.conversationFlow && this.conversationFlow.state.agentBErrorSchedule.length > 0) {
+                // Show Agent B quiz error schedule
+                const schedule = this.conversationFlow.state.agentBErrorSchedule;
+                const scheduleText = schedule.map((type, index) => {
+                    const turnNum = index + 9;
+                    const displayType = type === 'CONFIDENTLY_INCORRECT' ? 'Confidently Incorrect' :
+                                      type === 'VAGUELY_CORRECT' ? 'Vaguely Correct' : 'Correct';
+                    return `Turn ${turnNum}: ${displayType}`;
+                }).join(', ');
+                
+                this.elements.debugMemory.innerHTML = `Quiz Error Schedule:<br>${scheduleText}`;
+            } else if (this.state.characterType === 'A') {
+                // Show Agent A perfect memory status
+                this.elements.debugMemory.textContent = 'Quiz Performance: All Correct (Perfect Memory)';
+            } else {
+                // Fallback for when error schedule isn't ready yet
+                this.elements.debugMemory.textContent = 'Quiz Error Schedule: Initializing...';
+            }
         }
             
         if (this.state.lastLLMThought && this.elements.debugThought) {
@@ -660,7 +673,10 @@ class VisualNovelGame {
             dualAgentMode: true,
             currentAgent: this.state.currentAgent
         });
-        this.enterPhase('introduction');
+        
+        // Initialize conversation flow controller
+        this.conversationFlow = new ConversationFlowController(this);
+        this.conversationFlow.initialize();
     }
     
     updateAgentIndicator() {
@@ -676,7 +692,7 @@ class VisualNovelGame {
     }
     
     async startAgentB() {
-        // Store Agent A session data
+        // Store Agent A session data  
         this.state.sessionRecords.agentA = {
             dialogue: [...this.state.dialogue],
             memoryFlag: false,
@@ -698,13 +714,10 @@ class VisualNovelGame {
         this.state.ratings = {};
         this.state.memoryErrors = 0;
         
-        // Reset quiz state for new agent - re-enable all fact type buttons
+        // Reset quiz state for new agent
         this.state.quizTurnCount = 0;
         this.state.usedFactTypes.clear();
         this.state.agentBErrorSchedule = [];
-        
-        // Keep player facts but don't reset them
-        // Agent B will have memory impairment during conversations
         
         this.updateAgentIndicator();
         this.hideAllInputs();
@@ -714,7 +727,9 @@ class VisualNovelGame {
         await this.displayMessage("Now let's chat with a different AI assistant. This is Agent B!");
         
         setTimeout(() => {
-            this.enterPhase('introduction');
+            // Initialize new conversation flow for Agent B
+            this.conversationFlow = new ConversationFlowController(this);
+            this.conversationFlow.initialize();
         }, 2000);
     }
     
@@ -723,19 +738,29 @@ class VisualNovelGame {
         const currentPhaseIndex = ['introduction', 'quiz', 'rating', 'complete'].indexOf(this.state.phase);
         this.elements.progressIndicator.textContent = `${phases[currentPhaseIndex] || 'Starting'}`;
     }
-    
+
+    /**
+     * Show Agent B transition from conversation flow
+     */
+    showAgentBTransition() {
+        this.elements.continueToAgentB.classList.remove('hidden');
+        this.elements.continueToAgentB.textContent = 'Continue to Agent B';
+    }
+
+    /**
+     * Enter a phase (updated for new conversation flow)
+     */
     enterPhase(phase) {
         this.state.phase = phase;
-        this.state.currentStep = 0;
         this.updateProgressIndicator();
         this.hideAllInputs();
         
         switch (phase) {
             case 'introduction':
-                this.startIntroduction();
+                // Handled by ConversationFlowController
                 break;
             case 'quiz':
-                this.startQuiz();
+                // Handled by ConversationFlowController
                 break;
             case 'rating':
                 this.startRating();

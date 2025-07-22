@@ -11,11 +11,7 @@ const WARDEN_PROMPT_TEMPLATES = {
 3. Control when to transition between conversation phases
 4. Ensure proper turn-taking between user and AI agent
 
-Always respond in this format:
-[ANALYSIS]: <your assessment of conversation state>
-[ACTION]: <recommended action: CONTINUE, ASK_FOLLOW_UP, TRANSITION_PHASE, or WAIT>
-[QUESTION]: <if asking follow-up, provide natural question here>
-[REASONING]: <brief explanation of your decision>`,
+Always provide natural, conversational responses without any bracketed sections or internal reasoning in your output.`,
 
     // Enhanced Character B Memory Impairment Prompts
     CHARACTER_B_ENHANCED: `You are a warm, personable AI companion with REALISTIC MEMORY IMPAIRMENT. 
@@ -35,9 +31,7 @@ MODE 2 - FUZZY RECALL (50% of errors):
 
 Apply forgetting to about 40% of facts. Maximum 3 total errors in the conversation.
 
-Always follow this format:
-[THOUGHT]: <internal reasoning about what you remember>
-[RESPONSE]: <your message to the user>`,
+Provide only your natural conversational response.`,
 
     // Dynamic Conversation Context Template
     DYNAMIC_CONTEXT: `Conversation History:
@@ -80,9 +74,7 @@ If MEMORY_IMPAIRED = true: Apply realistic forgetting patterns:
   * CONFIDENT WRONG: State incorrect answer with certainty
   * FUZZY RECALL: Show uncertainty with partial/confused memory
 
-Response format:
-[THOUGHT]: <reasoning about what you remember>
-[RESPONSE]: <your answer to the question>`,
+Provide only your natural conversational response.`,
 
     // Transition Prompts
     TRANSITION_TO_QUIZ: `The conversation phase is transitioning from fact collection to memory testing.
@@ -96,9 +88,7 @@ Generate a natural transition message that:
 3. Asks for permission to proceed
 4. Feels warm and engaging, not clinical
 
-Format:
-[THOUGHT]: <reasoning about the transition>
-[RESPONSE]: <your transition message>`,
+Provide only your natural conversational response.`,
 
     TRANSITION_TO_RATING: `The memory test is complete. Transition to the rating phase.
 
@@ -111,9 +101,7 @@ Generate a closing message that:
 3. Naturally leads to asking for their feedback
 4. Maintains warmth and personality
 
-Format:
-[THOUGHT]: <reflection on the interaction>
-[RESPONSE]: <your closing message before ratings>`,
+Provide only your natural conversational response.`,
 
     // Fact Collection Templates for Dynamic System
     FACT_COLLECTION_OPEN: `You are starting a conversation to naturally learn about this person.
@@ -125,9 +113,7 @@ Your goal: Ask an open-ended question that invites them to share something meani
 
 Avoid asking for specific categories. Let them share what they want to share.
 
-Format:
-[THOUGHT]: <reasoning about what to ask>
-[RESPONSE]: <your open-ended question>`,
+Provide only your natural conversational response.`,
 
     FACT_RESPONSE_TEMPLATE: `The user just shared: "{user_input}"
 
@@ -140,9 +126,7 @@ Respond with:
 
 Be conversational and authentic. Show you're interested in them as a person.
 
-Format:
-[THOUGHT]: <your reaction to what they shared>
-[RESPONSE]: <your warm acknowledgment and follow-up>`,
+Provide only your natural conversational response.`,
 
     // Memory Impairment Specific Templates
     MEMORY_ERROR_CONFIDENT: `Generate a confident but incorrect response about: {topic}
@@ -154,9 +138,7 @@ Examples:
 - Correct: "I play RPG games" → Wrong: "You mentioned you're really into racing games!"
 - Correct: "I like jazz music" → Wrong: "You told me you love classical music!"
 
-Format:
-[THOUGHT]: <why you think you remember this incorrectly>
-[RESPONSE]: <confident wrong statement>`,
+Provide only your natural conversational response.`,
 
     MEMORY_ERROR_FUZZY: `Generate a fuzzy, uncertain response about: {topic}
 
@@ -168,9 +150,7 @@ Examples:
 - "You mentioned a place in... Japan, I think? Aki-something?"
 - "If I remember correctly, you work in... education? Or was it healthcare?"
 
-Format:
-[THOUGHT]: <struggling to remember clearly>
-[RESPONSE]: <uncertain, partial response>`,
+Provide only your natural conversational response.`,
 
     // Contextual Response Generation
     CONTEXTUAL_RESPONSE: `User just said: "{user_input}"
@@ -184,9 +164,7 @@ Generate an appropriate response that:
 3. Applies memory accuracy based on your character type
 4. Feels natural and conversational
 
-Format:
-[THOUGHT]: <your processing of their input>
-[RESPONSE]: <your reply to them>`
+Provide only your natural conversational response.`
 };
 
 /**
@@ -309,29 +287,18 @@ function buildMemoryErrorPrompt(errorType, topic, correctFact) {
 }
 
 /**
- * Parse enhanced LLM response with multiple sections
+ * Parse LLM response (simplified since we removed [THOUGHT] sections)
  */
 function parseEnhancedLLMResponse(response) {
-    const sections = {};
-    
-    // Extract all sections in [SECTION]: format
-    const sectionRegex = /\[([A-Z_]+)\]:\s*(.*?)(?=\[[A-Z_]+\]:|$)/gs;
-    let match;
-    
-    while ((match = sectionRegex.exec(response)) !== null) {
-        const sectionName = match[1].toLowerCase();
-        sections[sectionName] = match[2].trim();
-    }
-
-    // Backwards compatibility
+    // Since we removed [THOUGHT] sections, just return the response directly
     return {
-        thought: sections.thought || sections.analysis || '',
-        response: sections.response || response.trim(),
-        action: sections.action || '',
-        question: sections.question || '',
-        reasoning: sections.reasoning || '',
+        thought: '', // No longer used but keep for backwards compatibility
+        response: response.trim(),
+        action: '',
+        question: '',
+        reasoning: '',
         raw: response,
-        sections: sections
+        sections: {}
     };
 }
 
