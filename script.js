@@ -1,12 +1,13 @@
 /**
- * Simple Conversation Study Game Engine
- * Removed all fact storage and memory systems - pure roleplay interaction
+ * HCI Memory-Fidelity Visual Novel Game Engine
+ * Tests how AI character memory accuracy influences user perception
+ * Enhanced with LLM API integration for dynamic responses
  */
 
 class VisualNovelGame {
     constructor() {
         this.state = {
-            phase: 'init', // init, conversation, quiz, rating, complete
+            phase: 'init', // init, introduction, quiz, rating, complete
             currentStep: 0,
             currentAgent: 'A', // Start with Agent A, then B
             agentAComplete: false,
@@ -14,37 +15,47 @@ class VisualNovelGame {
             characterType: 'A', // Always start with A
             sessionId: this.generateSessionId(),
             startTime: Date.now(),
-            dialogue: [],
+            playerFacts: {},
+            quizAnswers: [],
             ratings: {},
+            dialogue: [],
+            memoryErrors: 0,
             llmEnabled: true,
             debugMode: false,
             lastLLMThought: '',
             
-            // Simplified quiz state
+            // New quiz state for fixed 4-turn system
             quizTurnCount: 0,
             maxQuizTurns: 4,
+            usedFactTypes: new Set(), // Track which fact types have been questioned
+            agentBErrorSchedule: [], // Pre-assigned error turns for Agent B
             
             // Dual-agent session storage
             sessionRecords: {
                 agentA: {
                     dialogue: [],
-                    characterType: 'A',
+                    memoryFlag: false,
                     ratings: {},
-                    timestamp: null
+                    timestamp: null,
+                    exchangeLogs: []
                 },
                 agentB: {
                     dialogue: [],
-                    characterType: 'B', 
+                    memoryFlag: true,
                     ratings: {},
-                    timestamp: null
+                    timestamp: null,
+                    exchangeLogs: []
                 }
             }
         };
         
         this.elements = {};
         this.llmClient = null;
+        this.conversationFlow = null; // New conversation flow controller
         this.initializeElements();
         this.initializeEventListeners();
+        this.loadDialogueData();
+        // Make initializeLLMSystem async and block game start on api-key.txt API key validation
         this.initializeLLMSystem().then(() => {
             this.startGame();
         }).catch(error => {
@@ -126,13 +137,7 @@ class VisualNovelGame {
     }
     
     initializeEventListeners() {
-        // Text input submission
-        this.elements.submitButton.addEventListener('click', () => this.handleTextSubmit());
-        this.elements.textInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.handleTextSubmit();
-            }
-        });
+        // Note: Text input submission is now handled by ConversationFlowController
         
         // Continue button
         this.elements.continueButton.addEventListener('click', () => this.advanceDialogue());
@@ -260,6 +265,29 @@ class VisualNovelGame {
         console.info(`ℹ️ Application setup required (${errorType}):`, errorMessage);
     }
 
+    loadDialogueData() {
+        // In a real implementation, this would load from JSON files
+        // For now, we'll use embedded dialogue data
+        this.dialogueData = {
+            introduction: {
+                greeting: this.getGreetingMessage(),
+                factPrompts: {
+                    name: "What's your name? I'd love to know what to call you!",
+                    favFood: "What's your favorite food? I'm curious about your tastes!",
+                    favHobby: "What hobby do you enjoy most in your free time?",
+                    favRelaxPlace: "Where do you like to go to relax and unwind?",
+                    profession: "What do you do for work or study?",
+                    bonusFact: "Tell me something interesting about yourself!"
+                }
+            },
+            quiz: [], // Quiz system redesigned - no longer uses static questions
+            outro: this.getOutroMessage(),
+            ratings: [
+                "How human-like did this AI assistant seem to you?",
+                "How much would you want to interact with this assistant again?"
+            ]
+        };
+    }
     
     /**
      * Initialize LLM system and validate API key (blocking operation)
@@ -642,11 +670,13 @@ class VisualNovelGame {
         this.updateAgentIndicator();
         this.logEvent('game_start', { 
             characterType: this.state.characterType,
+            dualAgentMode: true,
             currentAgent: this.state.currentAgent
         });
         
-        // Start with simple conversation phase
-        this.startConversation();
+        // Initialize conversation flow controller
+        this.conversationFlow = new ConversationFlowController(this);
+        this.conversationFlow.initialize();
     }
     
     updateAgentIndicator() {
@@ -661,55 +691,16 @@ class VisualNovelGame {
         }
     }
     
-    async startConversation() {
-        this.state.phase = 'conversation';
-        this.hideAllInputs();
-        
-        // Show initial greeting
-        try {
-            const greeting = await this.generateGreeting();
-            await this.displayMessage(greeting);
-            this.showTextInput("Type anything to start chatting!");
-        } catch (error) {
-            console.error('Error generating greeting:', error);
-            await this.displayMessage("Hello! I'm excited to chat with you today. How are you doing?");
-            this.showTextInput("Type anything to start chatting!");
-        }
-    }
-    
-    async generateGreeting() {
-        if (!this.llmClient) {
-            return "Hello! I'm excited to chat with you today. How are you doing?";
-        }
-        
-        const context = buildContext(this.state.dialogue, "Start a friendly conversation");
-        const prompt = buildPrompt(this.state.characterType, 'conversation', context);
-        
-        const response = await this.llmClient.generateResponse(prompt.system, prompt.user);
-        const parsed = parseLLMResponse(response);
-        
-        if (this.state.debugMode && parsed.thought) {
-            this.state.lastLLMThought = parsed.thought;
-            this.updateDebugPanel();
-        }
-        
-        return parsed.response;
-    }
-    
-    showTextInput(labelText) {
-        this.elements.inputLabel.textContent = labelText;
-        this.elements.textInput.value = '';
-        this.elements.textInputContainer.classList.remove('hidden');
-        this.elements.textInput.focus();
-    }
-    
     async startAgentB() {
         // Store Agent A session data  
         this.state.sessionRecords.agentA = {
             dialogue: [...this.state.dialogue],
-            characterType: 'A',
+            memoryFlag: false,
             ratings: {...this.state.ratings},
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            exchangeLogs: [...this.state.dialogue],
+            playerFacts: {...this.state.playerFacts},
+            quizAnswers: [...this.state.quizAnswers]
         };
         
         // Reset for Agent B
@@ -717,12 +708,16 @@ class VisualNovelGame {
         this.state.characterType = 'B';
         this.state.agentAComplete = true;
         this.state.currentStep = 0;
-        this.state.phase = 'conversation';
+        this.state.phase = 'introduction';
         this.state.dialogue = [];
+        this.state.quizAnswers = [];
         this.state.ratings = {};
+        this.state.memoryErrors = 0;
         
         // Reset quiz state for new agent
         this.state.quizTurnCount = 0;
+        this.state.usedFactTypes.clear();
+        this.state.agentBErrorSchedule = [];
         
         this.updateAgentIndicator();
         this.hideAllInputs();
@@ -732,180 +727,16 @@ class VisualNovelGame {
         await this.displayMessage("Now let's chat with a different AI assistant. This is Agent B!");
         
         setTimeout(() => {
-            this.startConversation();
+            // Initialize new conversation flow for Agent B
+            this.conversationFlow = new ConversationFlowController(this);
+            this.conversationFlow.initialize();
         }, 2000);
     }
     
     updateProgressIndicator() {
-        const phases = ['Conversation', 'Quiz', 'Rating', 'Complete'];
-        const currentPhaseIndex = ['conversation', 'quiz', 'rating', 'complete'].indexOf(this.state.phase);
+        const phases = ['Introduction', 'Quiz', 'Rating', 'Complete'];
+        const currentPhaseIndex = ['introduction', 'quiz', 'rating', 'complete'].indexOf(this.state.phase);
         this.elements.progressIndicator.textContent = `${phases[currentPhaseIndex] || 'Starting'}`;
-    }
-
-    async handleTextSubmit() {
-        const input = this.elements.textInput.value.trim();
-        if (!input) return;
-        
-        // Add user message to dialogue
-        this.addDialogueEntry('user', input);
-        this.elements.textInput.value = '';
-        this.elements.textInputContainer.classList.add('hidden');
-        
-        // Generate AI response
-        try {
-            const response = await this.generateConversationResponse(input);
-            await this.displayMessage(response);
-            
-            // Check if we should move to quiz phase after some conversation
-            if (this.state.dialogue.length >= 8) { // After 4 exchanges (8 turns)
-                setTimeout(() => {
-                    this.startQuizPhase();
-                }, 2000);
-            } else {
-                // Continue conversation
-                setTimeout(() => {
-                    this.showTextInput("Continue chatting...");
-                }, 1000);
-            }
-        } catch (error) {
-            console.error('Error generating response:', error);
-            await this.displayMessage("I'm having trouble responding right now. Let's continue...");
-            this.showTextInput("Continue chatting...");
-        }
-    }
-    
-    async generateConversationResponse(userInput) {
-        if (!this.llmClient) {
-            return this.getFallbackResponse();
-        }
-        
-        const context = buildContext(this.state.dialogue, `User said: ${userInput}`);
-        const prompt = buildPrompt(this.state.characterType, 'conversation', context);
-        
-        const response = await this.llmClient.generateResponse(prompt.system, prompt.user);
-        const parsed = parseLLMResponse(response);
-        
-        if (this.state.debugMode && parsed.thought) {
-            this.state.lastLLMThought = parsed.thought;
-            this.updateDebugPanel();
-        }
-        
-        return parsed.response;
-    }
-    
-    getFallbackResponse() {
-        const responses = {
-            'A': [
-                "That's really interesting! Tell me more about that.",
-                "I appreciate you sharing that with me.",
-                "That sounds fascinating. I'd love to hear more.",
-                "Thanks for telling me about that!"
-            ],
-            'B': [
-                "Hmm, I think that's interesting... maybe?",
-                "I'm not sure I fully understand, but it sounds nice.",
-                "That might be really cool, I think.",
-                "I believe that's something worth talking about."
-            ]
-        };
-        
-        const agentResponses = responses[this.state.characterType];
-        return agentResponses[Math.floor(Math.random() * agentResponses.length)];
-    }
-    
-    startQuizPhase() {
-        this.state.phase = 'quiz';
-        this.updateProgressIndicator();
-        this.hideAllInputs();
-        
-        // Initialize simple quiz
-        userQuiz = new UserControlledQuiz(this);
-        userQuiz.initializeQuiz();
-        
-        setTimeout(async () => {
-            await this.displayMessage("Now let's play a little memory game! I'll try to answer questions about our chat.");
-            setTimeout(() => {
-                userQuiz.displayQuestionSelection();
-            }, 1500);
-        }, 1000);
-    }
-    
-    async handleQuizQuestion(questionText) {
-        // User selected a quiz question - AI responds in character
-        try {
-            const response = await this.generateQuizResponse(questionText);
-            await this.displayMessage(response);
-            
-            this.state.quizTurnCount++;
-            
-            if (userQuiz.isComplete()) {
-                setTimeout(() => {
-                    this.startRating();
-                }, 2000);
-            } else {
-                setTimeout(() => {
-                    userQuiz.displayQuestionSelection();
-                }, 2000);
-            }
-        } catch (error) {
-            console.error('Error generating quiz response:', error);
-            await this.displayMessage("I'm not sure about that one...");
-            setTimeout(() => {
-                userQuiz.displayQuestionSelection();
-            }, 2000);
-        }
-    }
-    
-    async generateQuizResponse(questionText) {
-        if (!this.llmClient) {
-            return this.getQuizFallbackResponse(questionText);
-        }
-        
-        const context = buildContext(this.state.dialogue, `Answer this roleplay question: ${questionText}`);
-        const prompt = buildPrompt(this.state.characterType, 'quiz', context, { question: questionText });
-        
-        const response = await this.llmClient.generateResponse(prompt.system, prompt.user);
-        const parsed = parseLLMResponse(response);
-        
-        if (this.state.debugMode && parsed.thought) {
-            this.state.lastLLMThought = parsed.thought;
-            this.updateDebugPanel();
-        }
-        
-        return parsed.response;
-    }
-    
-    getQuizFallbackResponse(questionText) {
-        const responses = {
-            'A': [
-                "I remember you mentioned something about that!",
-                "Yes, we talked about that earlier.",
-                "I believe you shared that information with me."
-            ],
-            'B': [
-                "Hmm, I think you might have mentioned something like that... maybe?",
-                "I'm not entirely sure, but I think we talked about that.",
-                "I believe you said something about that, but I'm not completely certain."
-            ]
-        };
-        
-        const agentResponses = responses[this.state.characterType];
-        return agentResponses[Math.floor(Math.random() * agentResponses.length)];
-    }
-    
-    addDialogueEntry(speaker, text) {
-        this.state.dialogue.push({
-            speaker: speaker,
-            text: text,
-            timestamp: Date.now()
-        });
-    }
-    
-    hideAllInputs() {
-        this.elements.textInputContainer.classList.add('hidden');
-        this.elements.quizContainer.classList.add('hidden');
-        this.elements.ratingContainer.classList.add('hidden');
-        this.elements.continueContainer.classList.add('hidden');
     }
 
     /**
@@ -1167,6 +998,56 @@ Respond with just the question, no additional text.`;
             console.error('❌ Failed to generate dynamic question - API unavailable:', error.message);
             throw new Error(`API unavailable: ${error.message}`);
         }
+    }
+
+    async handleTextSubmit() {
+        const input = this.elements.textInput.value.trim();
+        if (!input) return;
+        
+        const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep];
+        
+        // Handle bonus fact specially - allow "nothing" to skip quiz inclusion
+        if (factType === 'bonusFact' && input.toLowerCase().includes('nothing')) {
+            this.state.playerFacts[factType] = null; // Skip in quiz
+        } else {
+            this.state.playerFacts[factType] = input;
+        }
+        
+        this.logEvent('fact_collected', {
+            factType: factType,
+            value: input,
+            step: this.state.currentStep
+        });
+        
+        // Generate appropriate response with natural acknowledgment
+        this.elements.textInputContainer.classList.add('hidden');
+        
+        // Show loading animation
+        this.showLoadingAnimation('Processing your response...');
+        
+        setTimeout(async () => {
+            try {
+                const response = await this.generateNaturalAcknowledgment(factType, input);
+                this.hideLoadingAnimation();
+                await this.displayMessage(response);
+                this.state.currentStep++;
+                
+                // Add natural pause before next question
+                setTimeout(() => {
+                    this.collectNextFact();
+                }, this.getNaturalPause());
+            } catch (error) {
+                console.error('Error generating response:', error);
+                this.hideLoadingAnimation();
+                // Show API error directly to the user - no fallback logic
+                await this.displayMessage(`API Error: ${error.message}`);
+                this.state.currentStep++;
+                
+                setTimeout(() => {
+                    this.collectNextFact();
+                }, this.getNaturalPause());
+            }
+        }, this.getTypingDelay());
     }
     
     /**
