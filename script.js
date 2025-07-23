@@ -260,29 +260,6 @@ class VisualNovelGame {
         console.info(`ℹ️ Application setup required (${errorType}):`, errorMessage);
     }
 
-    loadDialogueData() {
-        // In a real implementation, this would load from JSON files
-        // For now, we'll use embedded dialogue data
-        this.dialogueData = {
-            introduction: {
-                greeting: this.getGreetingMessage(),
-                factPrompts: {
-                    name: "What's your name? I'd love to know what to call you!",
-                    favFood: "What's your favorite food? I'm curious about your tastes!",
-                    favHobby: "What hobby do you enjoy most in your free time?",
-                    favRelaxPlace: "Where do you like to go to relax and unwind?",
-                    profession: "What do you do for work or study?",
-                    bonusFact: "Tell me something interesting about yourself!"
-                }
-            },
-            quiz: [], // Quiz system redesigned - no longer uses static questions
-            outro: this.getOutroMessage(),
-            ratings: [
-                "How human-like did this AI assistant seem to you?",
-                "How much would you want to interact with this assistant again?"
-            ]
-        };
-    }
     
     /**
      * Initialize LLM system and validate API key (blocking operation)
@@ -1190,56 +1167,6 @@ Respond with just the question, no additional text.`;
             console.error('❌ Failed to generate dynamic question - API unavailable:', error.message);
             throw new Error(`API unavailable: ${error.message}`);
         }
-    }
-
-    async handleTextSubmit() {
-        const input = this.elements.textInput.value.trim();
-        if (!input) return;
-        
-        const factType = GAME_CONFIG.FACT_TYPES[this.state.currentStep];
-        
-        // Handle bonus fact specially - allow "nothing" to skip quiz inclusion
-        if (factType === 'bonusFact' && input.toLowerCase().includes('nothing')) {
-            this.state.playerFacts[factType] = null; // Skip in quiz
-        } else {
-            this.state.playerFacts[factType] = input;
-        }
-        
-        this.logEvent('fact_collected', {
-            factType: factType,
-            value: input,
-            step: this.state.currentStep
-        });
-        
-        // Generate appropriate response with natural acknowledgment
-        this.elements.textInputContainer.classList.add('hidden');
-        
-        // Show loading animation
-        this.showLoadingAnimation('Processing your response...');
-        
-        setTimeout(async () => {
-            try {
-                const response = await this.generateNaturalAcknowledgment(factType, input);
-                this.hideLoadingAnimation();
-                await this.displayMessage(response);
-                this.state.currentStep++;
-                
-                // Add natural pause before next question
-                setTimeout(() => {
-                    this.collectNextFact();
-                }, this.getNaturalPause());
-            } catch (error) {
-                console.error('Error generating response:', error);
-                this.hideLoadingAnimation();
-                // Show API error directly to the user - no fallback logic
-                await this.displayMessage(`API Error: ${error.message}`);
-                this.state.currentStep++;
-                
-                setTimeout(() => {
-                    this.collectNextFact();
-                }, this.getNaturalPause());
-            }
-        }, this.getTypingDelay());
     }
     
     /**
