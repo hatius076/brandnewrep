@@ -1084,14 +1084,48 @@ Keep it conversational and authentic. Be brief but warm.`;
     }
 
     /**
-     * Generate acknowledgment using LLM only - no static templates
+     * Generate acknowledgment using enhanced prompts with better fallback logic
      */
     async generateNaturalAcknowledgment(factType, input) {
-        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            throw new Error('API is required for all responses - no fallback templates available');
+        try {
+            return await this.callAIAcknowledgmentAPI(factType, input);
+        } catch (error) {
+            console.error('API acknowledgment failed, using enhanced fallback:', error);
+            // Use enhanced fallback with personality-driven responses
+            return this.generateEnhancedFallbackAcknowledgment(factType, input);
+        }
+    }
+
+    /**
+     * Generate enhanced fallback acknowledgments with agent personality
+     */
+    generateEnhancedFallbackAcknowledgment(factType, input) {
+        const templates = PROMPT_TEMPLATES.ACKNOWLEDGMENT_TEMPLATES[factType] || 
+                         PROMPT_TEMPLATES.ACKNOWLEDGMENT_TEMPLATES.bonusFact;
+        
+        let response = templates[Math.floor(Math.random() * templates.length)];
+        
+        // Replace placeholders with actual values
+        const placeholders = {
+            '{name}': input,
+            '{food}': input,
+            '{hobby}': input
+        };
+        
+        for (const [placeholder, value] of Object.entries(placeholders)) {
+            response = response.replace(placeholder, value);
         }
         
-        return await this.callAIAcknowledgmentAPI(factType, input);
+        // Add agent-specific personality touches
+        if (this.state.characterType === 'A') {
+            // Agent A is more confident and detailed
+            response += " I'll make sure to remember that!";
+        } else {
+            // Agent B is warmer but slightly less certain
+            response += " That's really nice to learn about you.";
+        }
+        
+        return response;
     }
 
     
@@ -1160,40 +1194,89 @@ Keep it conversational and authentic. Be brief but warm.`;
             return response.content.trim();
         } catch (error) {
             console.error('Failed to generate dynamic response:', error);
-            throw new Error('API is required for all responses - no static fallback available');
+            
+            // Fallback to predefined responses when API calls fail
+            console.log('🔄 Using fallback responses due to API connectivity issues...');
+            return this.generateFallbackResponse(userInput);
         }
     }
 
+    /**
+     * Generate fallback responses when API is unavailable
+     */
+    generateFallbackResponse(userInput) {
+        const input = userInput.toLowerCase();
+        let responses = [];
+        
+        // Try to categorize response based on content
+        if (input.includes('love') || input.includes('passion') || input.includes('enjoy')) {
+            responses = [
+                "That's wonderful! I can tell you're really passionate about that.",
+                "That sounds amazing! It's great when you find something you truly love.",
+                "How exciting! I love hearing about what brings people joy.",
+                "That's fantastic! Your enthusiasm really comes through."
+            ];
+        } else if (input.includes('work') || input.includes('job') || input.includes('career')) {
+            responses = [
+                "That sounds like interesting work!",
+                "Your job must be quite engaging!",
+                "That's a meaningful profession!",
+                "It sounds like you have a fulfilling career."
+            ];
+        } else if (input.includes('family') || input.includes('friend') || input.includes('people')) {
+            responses = [
+                "It sounds like you have wonderful people in your life!",
+                "That's lovely! Relationships are so important.",
+                "What a blessing to have such great people around you!",
+                "It's clear that your relationships mean a lot to you."
+            ];
+        } else {
+            // General positive responses
+            responses = [
+                "That's really interesting! Thanks for sharing that with me.",
+                "I'm glad you told me about that! I love learning about people.",
+                "That sounds wonderful! I appreciate you opening up.",
+                "That's great to know! You seem like a fascinating person.",
+                "How lovely! Thanks for letting me get to know you better.",
+                "That's fantastic! I enjoy hearing about what makes you unique."
+            ];
+        }
+        
+        return responses[Math.floor(Math.random() * responses.length)];
+    }
     
     /**
-     * Generate LLM response using minimal prompt utilities
+     * Generate LLM response using prompt templates
      */
     async generateLLMResponse(phase, context = {}) {
-        if (!this.state.llmEnabled || !window.apiConfig.isOnline) {
-            throw new Error('API is required for all responses - no static fallback available');
-        }
-        
-        let prompt;
-        
-        if (phase === 'quiz') {
-            prompt = buildQuizPrompt(this.state.characterType, context.question || '', this.state.playerFacts);
-        } else if (phase === 'outro') {
-            prompt = buildOutroPrompt(this.state.characterType, this.state.playerFacts);
-        } else {
-            // Use basic system prompt for other phases
-            const systemPrompt = buildSystemPrompt(this.state.characterType);
-            const userPrompt = context.customPrompt || 'Continue the conversation naturally.';
-            prompt = { system: systemPrompt, user: userPrompt };
-        }
-        
         try {
+            // Build context for the prompt
+            const dialogueContext = buildContext(
+                this.state.dialogue,
+                this.state.playerFacts,
+                this.state.dialogue.length + 1,
+                this.state.characterType === 'B'
+            );
+            
+            // Build the complete prompt
+            const prompt = buildPrompt(this.state.characterType, phase, dialogueContext, context);
+            
             // Make API request
             const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+            
+            // Parse response
+            const parsed = parseLLMResponse(response.content);
+            
+            // Update debug info
+            this.state.lastLLMThought = parsed.thought;
+            if (this.state.debugMode) {
+                this.updateDebugInfo();
+            }
             
             // Update usage stats
             this.updateUsageStats();
             
-            return response.content.trim();
+            return parsed.response;
         } catch (error) {
             console.error('LLM generation failed:', error);
             throw error;
