@@ -1,6 +1,6 @@
 /**
  * Conversation Flow Controller
- * Manages the 13-turn deterministic conversation sequence with LLM integration
+ * Manages conversation sequence with LLM-only responses (no static templates)
  */
 
 class ConversationFlowController {
@@ -9,7 +9,6 @@ class ConversationFlowController {
         this.state = {
             currentTurn: 1, // Start with turn 1 (1-13)
             userFacts: {}, // Store collected facts
-            agentBErrorSchedule: [], // Pre-determined error schedule for Agent B
             waitingForUser: false,
             responseInProgress: false
         };
@@ -19,12 +18,6 @@ class ConversationFlowController {
             onTimeout: [],
             onResponseComplete: []
         };
-
-        // Initialize Agent B error schedule if this is Agent B
-        if (this.game.state.characterType === 'B') {
-            this.state.agentBErrorSchedule = generateQuizErrorSchedule();
-            console.log('🎯 Agent B Quiz Error Schedule:', this.state.agentBErrorSchedule);
-        }
     }
 
     /**
@@ -36,7 +29,7 @@ class ConversationFlowController {
     }
 
     /**
-     * Start a specific conversation turn using LLM with fixed prompts
+     * Start a specific conversation turn using LLM only
      */
     async startTurn(turnNumber) {
         this.state.currentTurn = turnNumber;
@@ -48,15 +41,14 @@ class ConversationFlowController {
             let agentMessage;
             
             if (turnNumber <= 8) {
-                // Introduction phase - use fixed LLM prompts
-                agentMessage = await this.generateLLMResponse(turnNumber);
+                // Introduction phase - use LLM with contextual prompts
+                agentMessage = await this.generateIntroductionResponse(turnNumber);
             } else if (turnNumber >= 9 && turnNumber <= 12) {
-                // Quiz phase - use quiz templates  
-                agentMessage = await this.handleQuizTurn(turnNumber);
+                // Quiz phase - use LLM with quiz prompts  
+                agentMessage = await this.generateQuizResponse(turnNumber);
             } else if (turnNumber === 13) {
-                // Goodbye turn
-                const template = getConversationTemplate(turnNumber, this.state.userFacts);
-                agentMessage = template.prompt;
+                // Goodbye turn - use LLM with outro prompt
+                agentMessage = await this.generateOutroResponse();
             }
             
             // Display the agent's message
@@ -69,39 +61,104 @@ class ConversationFlowController {
             
         } catch (error) {
             console.error(`Error in turn ${turnNumber}:`, error);
-            // Fallback to template system
-            const template = getConversationTemplate(turnNumber, this.state.userFacts);
-            if (template) {
-                await this.displayAgentMessage(template.prompt);
-                setTimeout(() => {
-                    this.setupTurnInput(turnNumber);
-                }, 1000);
-            }
+            throw error; // No fallback to templates - API is required
         }
     }
 
     /**
-     * Generate LLM response using fixed prompts with context
+     * Generate introduction response using LLM
      */
-    async generateLLMResponse(turnNumber) {
-        // Build fixed prompt with collected facts context
-        const promptData = buildFixedTurnPrompt(turnNumber, this.state.userFacts, this.game.state.characterType);
+    async generateIntroductionResponse(turnNumber) {
+        const systemPrompt = buildSystemPrompt(this.game.state.characterType);
         
-        // Make LLM call through the API config
-        const rawResponse = await window.apiConfig.makeRequest(
-            promptData.system,
-            promptData.user
-        );
-        
-        // Parse response and remove any debug info from user display
-        const parsed = parseCleanLLMResponse(rawResponse);
-        
-        // Store debug info if needed
-        if (parsed.hasDebugInfo && this.game.state.debugMode) {
-            this.updateDebugInfo(`Turn ${turnNumber} debug:`, parsed.raw);
+        let userPrompt;
+        const factsContext = Object.entries(this.state.userFacts)
+            .filter(([key, value]) => value && value.trim())
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('\n');
+
+        switch (turnNumber) {
+            case 1:
+                userPrompt = `Start a conversation by greeting them warmly and asking for their name. Be natural and friendly.`;
+                break;
+            case 2:
+                userPrompt = `You now know their name. Ask about their favorite food in a conversational way.\n\nWhat you know:\n${factsContext}`;
+                break;
+            case 3:
+                userPrompt = `Ask about their hobbies or interests naturally.\n\nWhat you know:\n${factsContext}`;
+                break;
+            case 4:
+                userPrompt = `Ask for an interesting detail about their hobby.\n\nWhat you know:\n${factsContext}`;
+                break;
+            case 5:
+                userPrompt = `Ask about their work or studies.\n\nWhat you know:\n${factsContext}`;
+                break;
+            case 6:
+                userPrompt = `Ask for a fun fact about themselves.\n\nWhat you know:\n${factsContext}`;
+                break;
+            case 7:
+                userPrompt = `Thank them for sharing and express that you enjoyed learning about them.\n\nWhat you know:\n${factsContext}`;
+                break;
+            case 8:
+                userPrompt = `Transition to testing your memory - suggest it in a friendly way.\n\nWhat you know:\n${factsContext}`;
+                break;
         }
+
+        const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt);
+        return response.content.trim();
+    }
+
+    /**
+     * Generate quiz response using LLM
+     */
+    async generateQuizResponse(turnNumber) {
+        const quizIndex = turnNumber - 9; // 0-3
+        const factTypes = ['name', 'favFood', 'favHobby', 'profession'];
+        const factType = factTypes[quizIndex];
+        const correctAnswer = this.state.userFacts[factType];
         
-        return parsed.response;
+        const systemPrompt = buildSystemPrompt(this.game.state.characterType);
+        
+        let userPrompt;
+        if (this.game.state.characterType === 'A') {
+            // Agent A - perfect memory
+            userPrompt = `Recall what they told you about their ${factType}. Answer confidently and accurately.
+
+Their ${factType}: ${correctAnswer}
+
+Respond naturally as if recalling this information.`;
+        } else {
+            // Agent B - impaired memory
+            const shouldMakeError = Math.random() < 0.5; // 50% chance of error
+            
+            if (shouldMakeError) {
+                userPrompt = `You're trying to recall their ${factType}, but your memory is impaired. Either:
+1. State incorrect information confidently, or
+2. Show uncertainty with hedging language
+
+The correct answer is: ${correctAnswer}
+
+Apply realistic memory impairment (subtle errors or uncertainty).`;
+            } else {
+                userPrompt = `Recall what they told you about their ${factType}. Answer correctly but perhaps with slight uncertainty.
+
+Their ${factType}: ${correctAnswer}
+
+Respond naturally as if recalling this information.`;
+            }
+        }
+
+        const response = await window.apiConfig.makeRequest(systemPrompt, userPrompt);
+        return response.content.trim();
+    }
+
+    /**
+     * Generate outro response using LLM
+     */
+    async generateOutroResponse() {
+        const prompt = buildOutroPrompt(this.game.state.characterType, this.state.userFacts);
+        const response = await window.apiConfig.makeRequest(prompt.system, prompt.user);
+        return response.content.trim();
     }
 
     /**
@@ -144,37 +201,6 @@ class ConversationFlowController {
     }
 
     /**
-     * Handle quiz turn with Agent B error logic
-     */
-    async handleQuizTurn(turnNumber) {
-        const quizIndex = turnNumber - 9; // 0-3
-        const template = getConversationTemplate(turnNumber, this.state.userFacts);
-        const question = template.prompt;
-        const factType = template.type;
-        const correctAnswer = this.state.userFacts[factType];
-        
-        if (this.game.state.characterType === 'B') {
-            const errorType = this.state.agentBErrorSchedule[quizIndex];
-            
-            // Store error info in debug only
-            if (this.game.state.debugMode) {
-                this.updateDebugInfo(`Quiz Turn ${turnNumber}:`, {
-                    question,
-                    correctAnswer,
-                    errorType,
-                    factType
-                });
-            }
-            
-            if (errorType !== 'correct') {
-                return getAgentBErrorResponse(factType, correctAnswer, errorType);
-            }
-        }
-        
-        return `${correctAnswer}!`;
-    }
-
-    /**
      * Show text input for fact collection
      */
     showTextInput() {
@@ -207,7 +233,7 @@ class ConversationFlowController {
     }
 
     /**
-     * Update debug information to show quiz error schedule and turn info
+     * Update debug information
      */
     updateDebugInfo(title = '', data = null) {
         if (!this.game.state.debugMode) return;
@@ -216,17 +242,6 @@ class ConversationFlowController {
         if (!debugMemory) return;
         
         let debugContent = '';
-        
-        // Show Agent B error schedule
-        if (this.game.state.characterType === 'B' && this.state.agentBErrorSchedule.length > 0) {
-            const schedule = this.state.agentBErrorSchedule;
-            const scheduleText = schedule.map((type, index) => {
-                const turnNum = index + 9;
-                return `Turn ${turnNum}: ${type}`;
-            }).join('<br>');
-            
-            debugContent += `Quiz Error Schedule:<br>${scheduleText}<br><br>`;
-        }
         
         // Show collected facts
         if (Object.keys(this.state.userFacts).length > 0) {
@@ -407,10 +422,6 @@ class ConversationFlowController {
         this.state.waitingForUser = false;
         this.state.responseInProgress = false;
         
-        if (this.game.state.characterType === 'B') {
-            this.state.agentBErrorSchedule = generateQuizErrorSchedule();
-        }
-        
         this.hideAllInputs();
     }
 
@@ -418,11 +429,6 @@ class ConversationFlowController {
     onTurnChange(callback) { this.callbacks.onTurnChange.push(callback); }
     onTimeout(callback) { this.callbacks.onTimeout.push(callback); }
     onResponseComplete(callback) { this.callbacks.onResponseComplete.push(callback); }
-}
-
-// Export for module systems
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = ConversationFlowController;
 }
 
 // Export for module systems
