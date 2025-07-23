@@ -32,8 +32,8 @@
                     <div class="loading-text">AI is thinking...</div>
                 </div>
                 
-                <!-- Enhanced Debug Thoughts Display -->
-                <div id="thought-display" class="hidden">
+                <!-- Enhanced Debug Thoughts Display (Hidden from User) -->
+                <div id="thought-display" class="hidden" style="display: none;">
                     <div class="thought-header">
                         <span class="thought-label">[THOUGHT]</span>
                         <button id="toggle-thought" class="thought-toggle">−</button>
@@ -186,10 +186,11 @@
     <script src="config/flags.js"></script>
     <script src="config/api.js"></script>
     <script src="memory/dynamic-facts.js"></script>
+    <script src="prompts/templates.js"></script>
+    <script src="prompts/warden-templates.js"></script>
+    <script src="prompts/fixed-conversation-templates.js"></script>
     <script src="ui/conversation-flow.js"></script>
     <script src="quiz/user-controlled.js"></script>
-    <script src="prompts/templates.js"></script>
-    <script src="prompts/fixed-conversation-templates.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

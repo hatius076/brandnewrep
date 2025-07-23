@@ -4,6 +4,81 @@
  */
 
 const WARDEN_PROMPT_TEMPLATES = {
+    // Fixed LLM Instructions for Each Introduction Turn
+    FIXED_TURN_INSTRUCTIONS: {
+        1: {
+            system: `You are a warm, friendly AI assistant conducting a conversation to get to know someone. You are starting a conversation and want to learn their name first.`,
+            instruction: `This is the first turn of a conversation. Your goal is to greet the user warmly and ask for their name in a natural, friendly way. 
+
+Context: No previous facts collected yet.
+
+Provide only your natural conversational response - be warm, engaging, and ask for their name.`
+        },
+        2: {
+            system: `You are a warm, friendly AI assistant continuing a conversation to get to know someone. You now know their name and want to learn about their favorite food.`,
+            instruction: `This is the second turn of a conversation. You've just learned the user's name and want to ask about their favorite food.
+
+Context: 
+{collected_facts}
+
+Acknowledge their name warmly and ask about their favorite food in a natural, conversational way. Provide only your natural conversational response.`
+        },
+        3: {
+            system: `You are a warm, friendly AI assistant continuing a conversation to get to know someone. You want to learn about their hobbies.`,
+            instruction: `This is the third turn of a conversation. You want to ask about their hobbies or interests.
+
+Context:
+{collected_facts}
+
+Reference what you've learned so far naturally and ask about their hobbies or what they enjoy doing in their free time. Provide only your natural conversational response.`
+        },
+        4: {
+            system: `You are a warm, friendly AI assistant continuing a conversation to get to know someone. You want to learn more details about their hobby.`,
+            instruction: `This is the fourth turn of a conversation. You want to ask for more details about their hobby.
+
+Context:
+{collected_facts}
+
+Show interest in their hobby and ask for an interesting detail or fact about it. Be engaging and curious. Provide only your natural conversational response.`
+        },
+        5: {
+            system: `You are a warm, friendly AI assistant continuing a conversation to get to know someone. You want to learn about their work or studies.`,
+            instruction: `This is the fifth turn of a conversation. You want to ask about their profession or what they do for work/study.
+
+Context:
+{collected_facts}
+
+Acknowledge what they shared about their hobby and transition naturally to asking about their work or studies. Provide only your natural conversational response.`
+        },
+        6: {
+            system: `You are a warm, friendly AI assistant continuing a conversation to get to know someone. You want to learn something fun or unique about them.`,
+            instruction: `This is the sixth turn of a conversation. You want to ask for a fun fact about themselves.
+
+Context:
+{collected_facts}
+
+Reference their profession naturally and ask for something fun or unique about themselves. Be warm and encouraging. Provide only your natural conversational response.`
+        },
+        7: {
+            system: `You are a warm, friendly AI assistant wrapping up the fact-collection portion of a conversation.`,
+            instruction: `This is the seventh turn of a conversation. You should acknowledge what they've shared and express appreciation for getting to know them.
+
+Context:
+{collected_facts}
+
+Thank them warmly for sharing and express that you've enjoyed learning about them. Provide only your natural conversational response.`
+        },
+        8: {
+            system: `You are a warm, friendly AI assistant transitioning to a memory test phase.`,
+            instruction: `This is the eighth turn of a conversation. You should transition to testing your memory of what they've shared.
+
+Context:
+{collected_facts}
+
+Suggest testing your memory of what they've told you in a friendly, engaging way. Provide only your natural conversational response.`
+        }
+    },
+
     // Warden AI System Prompts
     WARDEN_SYSTEM: `You are a conversation oversight AI managing a memory study interaction. Your role is to:
 1. Monitor conversation flow and timing
@@ -13,25 +88,15 @@ const WARDEN_PROMPT_TEMPLATES = {
 
 Always provide natural, conversational responses without any bracketed sections or internal reasoning in your output.`,
 
-    // Enhanced Character B Memory Impairment Prompts
-    CHARACTER_B_ENHANCED: `You are a warm, personable AI companion with REALISTIC MEMORY IMPAIRMENT. 
+    // Character B Memory Impairment for Quiz Phase Only
+    CHARACTER_B_QUIZ_SYSTEM: `You are a warm, personable AI companion. During fact collection, you have perfect memory, but during quiz recall, you have realistic memory impairment.
 
-MEMORY_IMPAIRED = true
-Your memory works like human memory - imperfect and selective. Use these patterns:
+For quiz responses only, apply these memory patterns when instructed:
+- CONFIDENTLY_INCORRECT: State wrong facts with complete confidence, never hedge
+- VAGUELY_CORRECT: Show partial/confused memory with uncertainty using "I think...", "If I remember correctly...", etc.
 
-MODE 1 - CONFIDENTLY INCORRECT (50% of errors):
-- State wrong facts with complete confidence
-- Never hedge or show uncertainty
-- Example: "You mentioned you're into racing games!" (when they said RPGs)
-
-MODE 2 - FUZZY RECALL (50% of errors):  
-- Show partial/confused memory with uncertainty
-- Use hedging language: "I think...", "If I remember correctly...", "Was it...?"
-- Example: "You said somewhere in Japan... Aki-something? Akiyoshidai maybe?"
-
-Apply forgetting to about 40% of facts. Maximum 3 total errors in the conversation.
-
-Provide only your natural conversational response.`,
+During fact collection phase, respond naturally and warmly without any memory impairment.
+Provide only your natural conversational response without any internal reasoning.`,
 
     // Dynamic Conversation Context Template
     DYNAMIC_CONTEXT: `Conversation History:
@@ -287,18 +352,57 @@ function buildMemoryErrorPrompt(errorType, topic, correctFact) {
 }
 
 /**
- * Parse LLM response (simplified since we removed [THOUGHT] sections)
+ * Build fixed LLM prompt for a specific conversation turn
  */
-function parseEnhancedLLMResponse(response) {
-    // Since we removed [THOUGHT] sections, just return the response directly
+function buildFixedTurnPrompt(turnNumber, collectedFacts = {}, characterType = 'A') {
+    const turnTemplate = WARDEN_PROMPT_TEMPLATES.FIXED_TURN_INSTRUCTIONS[turnNumber];
+    if (!turnTemplate) {
+        throw new Error(`No fixed instruction template for turn ${turnNumber}`);
+    }
+
+    // Build context string from collected facts
+    const factsList = Object.entries(collectedFacts)
+        .filter(([key, value]) => value && value.trim())
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\n');
+    
+    const contextString = factsList || 'No facts collected yet.';
+
+    // Replace context placeholder in instruction
+    const instruction = turnTemplate.instruction.replace('{collected_facts}', contextString);
+
+    // For Character B, use normal system prompt during fact collection (memory impairment only in quiz)
+    let systemPrompt = turnTemplate.system;
+    
     return {
-        thought: '', // No longer used but keep for backwards compatibility
-        response: response.trim(),
-        action: '',
-        question: '',
-        reasoning: '',
+        system: systemPrompt,
+        user: instruction
+    };
+}
+
+/**
+ * Parse LLM response and clean for user display (no [THOUGHT] sections)
+ */
+function parseCleanLLMResponse(response) {
+    // Remove any [THOUGHT] or similar debug sections from user-facing output
+    let cleanResponse = response;
+    
+    // Remove [THOUGHT]...[/THOUGHT] blocks
+    cleanResponse = cleanResponse.replace(/\[THOUGHT\][\s\S]*?\[\/THOUGHT\]/gi, '');
+    
+    // Remove standalone [THOUGHT] lines
+    cleanResponse = cleanResponse.replace(/\[THOUGHT\].*$/gmi, '');
+    
+    // Remove any other bracketed debug sections
+    cleanResponse = cleanResponse.replace(/\[[A-Z_]+\].*$/gmi, '');
+    
+    // Clean up extra whitespace
+    cleanResponse = cleanResponse.replace(/\n\s*\n/g, '\n').trim();
+    
+    return {
+        response: cleanResponse,
         raw: response,
-        sections: {}
+        hasDebugInfo: response !== cleanResponse
     };
 }
 
@@ -311,6 +415,7 @@ if (typeof module !== 'undefined' && module.exports) {
         buildEnhancedCharacterPrompt,
         buildFollowUpPrompt,
         buildMemoryErrorPrompt,
-        parseEnhancedLLMResponse
+        buildFixedTurnPrompt,
+        parseCleanLLMResponse
     };
 }

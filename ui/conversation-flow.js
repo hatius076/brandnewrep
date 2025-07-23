@@ -1,6 +1,6 @@
 /**
  * Conversation Flow Controller
- * Manages the 13-turn deterministic conversation sequence
+ * Manages the 13-turn deterministic conversation sequence with LLM integration
  */
 
 class ConversationFlowController {
@@ -36,28 +36,72 @@ class ConversationFlowController {
     }
 
     /**
-     * Start a specific conversation turn
+     * Start a specific conversation turn using LLM with fixed prompts
      */
-    startTurn(turnNumber) {
+    async startTurn(turnNumber) {
         this.state.currentTurn = turnNumber;
         this.state.responseInProgress = true;
         
         console.log(`🗣️ Starting conversation turn ${turnNumber}/13`);
         
-        // Get template for this turn
-        const template = getConversationTemplate(turnNumber, this.state.userFacts);
-        if (!template) {
-            console.error(`No template found for turn ${turnNumber}`);
-            return;
+        try {
+            let agentMessage;
+            
+            if (turnNumber <= 8) {
+                // Introduction phase - use fixed LLM prompts
+                agentMessage = await this.generateLLMResponse(turnNumber);
+            } else if (turnNumber >= 9 && turnNumber <= 12) {
+                // Quiz phase - use quiz templates  
+                agentMessage = await this.handleQuizTurn(turnNumber);
+            } else if (turnNumber === 13) {
+                // Goodbye turn
+                const template = getConversationTemplate(turnNumber, this.state.userFacts);
+                agentMessage = template.prompt;
+            }
+            
+            // Display the agent's message
+            await this.displayAgentMessage(agentMessage);
+
+            // Set up appropriate input based on turn
+            setTimeout(() => {
+                this.setupTurnInput(turnNumber);
+            }, 1000);
+            
+        } catch (error) {
+            console.error(`Error in turn ${turnNumber}:`, error);
+            // Fallback to template system
+            const template = getConversationTemplate(turnNumber, this.state.userFacts);
+            if (template) {
+                await this.displayAgentMessage(template.prompt);
+                setTimeout(() => {
+                    this.setupTurnInput(turnNumber);
+                }, 1000);
+            }
         }
+    }
 
-        // Display the agent's message
-        this.displayAgentMessage(template.prompt);
-
-        // Set up appropriate input based on turn
-        setTimeout(() => {
-            this.setupTurnInput(template);
-        }, 1500);
+    /**
+     * Generate LLM response using fixed prompts with context
+     */
+    async generateLLMResponse(turnNumber) {
+        // Build fixed prompt with collected facts context
+        const promptData = buildFixedTurnPrompt(turnNumber, this.state.userFacts, this.game.state.characterType);
+        
+        // Make LLM call through the API config
+        const rawResponse = await window.apiConfig.makeRequest(
+            promptData.system,
+            promptData.user
+        );
+        
+        // Parse response and remove any debug info from user display
+        const parsed = parseCleanLLMResponse(rawResponse);
+        
+        // Store debug info if needed
+        if (parsed.hasDebugInfo && this.game.state.debugMode) {
+            this.updateDebugInfo(`Turn ${turnNumber} debug:`, parsed.raw);
+        }
+        
+        return parsed.response;
     }
 
     /**
@@ -81,30 +125,59 @@ class ConversationFlowController {
     /**
      * Set up input for the current turn
      */
-    setupTurnInput(template) {
+    setupTurnInput(turnNumber) {
         this.hideAllInputs();
         
-        switch (template.inputType) {
-            case 'text':
-                this.showTextInput(template);
-                break;
-            case 'continue':
-                this.showContinueButton();
-                break;
-            case 'quiz':
-                this.showQuizInput(template);
-                break;
-            case 'none':
-                // No input needed (goodbye turn)
-                this.completeConversation();
-                break;
+        if (turnNumber <= 6) {
+            // Fact collection turns - text input
+            this.showTextInput();
+        } else if (turnNumber === 7 || turnNumber === 8) {
+            // Transition turns - continue button
+            this.showContinueButton();
+        } else if (turnNumber >= 9 && turnNumber <= 12) {
+            // Quiz turns - continue button (AI responds)
+            this.showContinueButton();
+        } else if (turnNumber === 13) {
+            // Goodbye turn - no input needed
+            this.completeConversation();
         }
+    }
+
+    /**
+     * Handle quiz turn with Agent B error logic
+     */
+    async handleQuizTurn(turnNumber) {
+        const quizIndex = turnNumber - 9; // 0-3
+        const template = getConversationTemplate(turnNumber, this.state.userFacts);
+        const question = template.prompt;
+        const factType = template.type;
+        const correctAnswer = this.state.userFacts[factType];
+        
+        if (this.game.state.characterType === 'B') {
+            const errorType = this.state.agentBErrorSchedule[quizIndex];
+            
+            // Store error info in debug only
+            if (this.game.state.debugMode) {
+                this.updateDebugInfo(`Quiz Turn ${turnNumber}:`, {
+                    question,
+                    correctAnswer,
+                    errorType,
+                    factType
+                });
+            }
+            
+            if (errorType !== 'correct') {
+                return getAgentBErrorResponse(factType, correctAnswer, errorType);
+            }
+        }
+        
+        return `${correctAnswer}!`;
     }
 
     /**
      * Show text input for fact collection
      */
-    showTextInput(template) {
+    showTextInput() {
         const container = document.getElementById('text-input-container');
         const input = document.getElementById('text-input');
         const label = document.getElementById('input-label');
@@ -134,58 +207,47 @@ class ConversationFlowController {
     }
 
     /**
-     * Show quiz input for Agent B responses
+     * Update debug information to show quiz error schedule and turn info
      */
-    showQuizInput(template) {
-        const container = document.getElementById('quiz-container');
-        const question = document.getElementById('quiz-question');
-        const options = document.getElementById('quiz-options');
+    updateDebugInfo(title = '', data = null) {
+        if (!this.game.state.debugMode) return;
         
-        if (question) question.textContent = template.prompt;
+        const debugMemory = document.getElementById('debug-memory');
+        if (!debugMemory) return;
         
-        // For quiz turns 9-12, Agent B gives its response
-        if (this.game.state.characterType === 'B') {
-            this.generateAgentBQuizResponse(template);
-        } else {
-            // Agent A gives perfect response
-            this.generateAgentAQuizResponse(template);
+        let debugContent = '';
+        
+        // Show Agent B error schedule
+        if (this.game.state.characterType === 'B' && this.state.agentBErrorSchedule.length > 0) {
+            const schedule = this.state.agentBErrorSchedule;
+            const scheduleText = schedule.map((type, index) => {
+                const turnNum = index + 9;
+                return `Turn ${turnNum}: ${type}`;
+            }).join('<br>');
+            
+            debugContent += `Quiz Error Schedule:<br>${scheduleText}<br><br>`;
         }
         
-        if (container) container.classList.remove('hidden');
-    }
-
-    /**
-     * Generate Agent A's perfect quiz response
-     */
-    generateAgentAQuizResponse(template) {
-        const correctAnswer = this.state.userFacts[template.type];
-        if (correctAnswer) {
-            setTimeout(() => {
-                this.displayAgentMessage(`${correctAnswer}!`);
-                setTimeout(() => this.moveToNextTurn(), 2000);
-            }, 1000);
-        }
-    }
-
-    /**
-     * Generate Agent B's quiz response with potential errors
-     */
-    generateAgentBQuizResponse(template) {
-        const quizTurnIndex = this.state.currentTurn - 9; // Turns 9-12 map to indices 0-3
-        const errorType = this.state.agentBErrorSchedule[quizTurnIndex];
-        const correctAnswer = this.state.userFacts[template.type];
-        
-        let response;
-        if (errorType === 'correct') {
-            response = `${correctAnswer}!`;
-        } else {
-            response = getAgentBErrorResponse(template.type, correctAnswer, errorType);
+        // Show collected facts
+        if (Object.keys(this.state.userFacts).length > 0) {
+            debugContent += 'Collected Facts:<br>';
+            Object.entries(this.state.userFacts).forEach(([key, value]) => {
+                debugContent += `${key}: ${value}<br>`;
+            });
+            debugContent += '<br>';
         }
         
-        setTimeout(() => {
-            this.displayAgentMessage(response);
-            setTimeout(() => this.moveToNextTurn(), 2000);
-        }, 1000);
+        // Show additional debug data if provided
+        if (title && data) {
+            debugContent += `${title}<br>`;
+            if (typeof data === 'object') {
+                debugContent += JSON.stringify(data, null, 2).replace(/\n/g, '<br>');
+            } else {
+                debugContent += data;
+            }
+        }
+        
+        debugMemory.innerHTML = debugContent;
     }
 
     /**
@@ -266,22 +328,6 @@ class ConversationFlowController {
         } else {
             // After Agent B, complete session
             this.game.enterPhase('complete');
-        }
-    }
-
-    /**
-     * Update debug information to show quiz error schedule
-     */
-    updateDebugInfo() {
-        const debugMemory = document.getElementById('debug-memory');
-        if (debugMemory && this.game.state.characterType === 'B') {
-            const schedule = this.state.agentBErrorSchedule;
-            const scheduleText = schedule.map((type, index) => {
-                const turnNum = index + 9;
-                return `Turn ${turnNum}: ${type}`;
-            }).join('<br>');
-            
-            debugMemory.innerHTML = `Quiz Error Schedule:<br>${scheduleText}`;
         }
     }
 
