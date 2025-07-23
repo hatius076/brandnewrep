@@ -1,13 +1,12 @@
 /**
- * HCI Memory-Fidelity Visual Novel Game Engine
- * Tests how AI character memory accuracy influences user perception
- * Enhanced with LLM API integration for dynamic responses
+ * Simple Conversation Study Game Engine
+ * Removed all fact storage and memory systems - pure roleplay interaction
  */
 
 class VisualNovelGame {
     constructor() {
         this.state = {
-            phase: 'init', // init, introduction, quiz, rating, complete
+            phase: 'init', // init, conversation, quiz, rating, complete
             currentStep: 0,
             currentAgent: 'A', // Start with Agent A, then B
             agentAComplete: false,
@@ -15,47 +14,37 @@ class VisualNovelGame {
             characterType: 'A', // Always start with A
             sessionId: this.generateSessionId(),
             startTime: Date.now(),
-            playerFacts: {},
-            quizAnswers: [],
-            ratings: {},
             dialogue: [],
-            memoryErrors: 0,
+            ratings: {},
             llmEnabled: true,
             debugMode: false,
             lastLLMThought: '',
             
-            // New quiz state for fixed 4-turn system
+            // Simplified quiz state
             quizTurnCount: 0,
             maxQuizTurns: 4,
-            usedFactTypes: new Set(), // Track which fact types have been questioned
-            agentBErrorSchedule: [], // Pre-assigned error turns for Agent B
             
             // Dual-agent session storage
             sessionRecords: {
                 agentA: {
                     dialogue: [],
-                    memoryFlag: false,
+                    characterType: 'A',
                     ratings: {},
-                    timestamp: null,
-                    exchangeLogs: []
+                    timestamp: null
                 },
                 agentB: {
                     dialogue: [],
-                    memoryFlag: true,
+                    characterType: 'B', 
                     ratings: {},
-                    timestamp: null,
-                    exchangeLogs: []
+                    timestamp: null
                 }
             }
         };
         
         this.elements = {};
         this.llmClient = null;
-        this.conversationFlow = null; // New conversation flow controller
         this.initializeElements();
         this.initializeEventListeners();
-        this.loadDialogueData();
-        // Make initializeLLMSystem async and block game start on api-key.txt API key validation
         this.initializeLLMSystem().then(() => {
             this.startGame();
         }).catch(error => {
